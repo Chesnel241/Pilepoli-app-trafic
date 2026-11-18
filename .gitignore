@@ -1,0 +1,10 @@
+node_modules/
+.env
+*.log
+engine/data/
+engine/dist/
+mobile/.expo/
+mobile/dist/
+mobile/ios/
+mobile/android/
+.DS_Store
