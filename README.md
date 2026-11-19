@@ -69,3 +69,8 @@ Seuils de fraîcheur actuels (dans `engine/src/reliability/freshness.ts`) : En d
 - Numéros de sortie et d'accès réels à partir des données des gares.
 - Prédictions à partir de l'historique, notifications et écran verrouillé (Live Activities).
 - Mode simple et « Aide-moi » pour les proches.
+
+## Identité visuelle
+
+Le kit de marque est dans `brand/kit/` (logos SVG et PNG, icônes iOS, Android et web, visuels réseaux sociaux, flyers, intro vidéo, charte PDF). Voir `brand/kit/LISEZ-MOI.md`.
+Les scripts qui génèrent tout le kit sont dans `brand/generateur/` : `npm install`, puis `node gen-logo-icons.mjs`, `node gen-com.mjs`, `node gen-video.mjs`, `node gen-guide.mjs` (les polices viennent de `mobile/node_modules`, lance d'abord `npm install` dans `mobile/`). La vidéo transparente (ProRes, lourde) n'est pas versionnée : `gen-video.mjs` la recrée.
