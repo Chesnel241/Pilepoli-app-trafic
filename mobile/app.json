@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Pile",
-    "slug": "pile",
+    "name": "Pilepoil",
+    "slug": "pilepoil",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -26,8 +26,16 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "backgroundColor": "#5B3DF5"
+        }
+      ]
     ],
-    "scheme": "pile"
+    "scheme": "pilepoil"
   }
 }

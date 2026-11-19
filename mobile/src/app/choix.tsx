@@ -18,7 +18,7 @@ export default function Choix() {
 
   useEffect(() => {
     fetchJourneys(from ?? '', to ?? '').then((r) => {
-      // Le plus fiable d'abord, puis le plus rapide : c'est la promesse de Pile.
+      // Le plus fiable d'abord, puis le plus rapide : c'est la promesse de Pilepoil.
       const sorted = [...r.journeys].sort((a, b) => RANK[a.reliability] - RANK[b.reliability] || a.durationMin - b.durationMin);
       trip.setOptions(sorted);
       setList(sorted);

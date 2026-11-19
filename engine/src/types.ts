@@ -1,5 +1,5 @@
 /**
- * Types partagés du moteur Pile.
+ * Types partagés du moteur Pilepoil.
  * Règle d'or : on ne présente jamais une estimation comme un fait.
  * Chaque passage porte donc son statut de fiabilité et l'âge de sa dernière info.
  */

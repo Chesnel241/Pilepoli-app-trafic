@@ -1,6 +1,6 @@
-# Pile
+# Pilepoil
 
-**Métro, RER, bus. Simple et à l'heure.**
+**Pile-poil à l'heure.** Métro, RER, bus, simple et à l'heure.
 L'app de transport d'Île-de-France qui te guide sans que tu touches l'écran, et qui te dit honnêtement quand une info n'est pas sûre.
 
 Ce dépôt contient la **version 0.1** :

@@ -2,7 +2,7 @@ import { localDepartures, localJourneys } from './mock';
 import type { Journey, Place, StopSnapshot } from './types';
 
 /**
- * Client du moteur Pile.
+ * Client du moteur Pilepoil.
  * Si le moteur est injoignable, on bascule sur des données locales simulées,
  * et l'interface l'indique (source = 'local') : on ne cache jamais d'où vient l'info.
  */

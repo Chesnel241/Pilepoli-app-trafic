@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { colors, fonts, radius, reliabilityStyle, type Reliability } from '../theme';
+import { Wordmark } from './Wordmark';
 
 /** Point qui pulse : signale une info vue en direct. */
 export function PulseDot({ color = colors.ink, size = 8 }: { color?: string; size?: number }) {
@@ -77,12 +78,8 @@ export function IconButton({ label, onPress, children, dark = false }: {
 }
 
 export function Logo({ size = 26, dot = colors.violet, color = colors.ink }: { size?: number; dot?: string; color?: string }) {
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 2 }}>
-      <Text style={{ fontFamily: fonts.display, fontSize: size, color, letterSpacing: -0.5, lineHeight: size * 1.05 }}>pile</Text>
-      <View style={{ width: size * 0.3, height: size * 0.3, borderRadius: size, backgroundColor: dot, marginBottom: size * 0.2 }} />
-    </View>
-  );
+  // Le vrai logo vectoriel : point violet stable, point citron « en direct ».
+  return <Wordmark height={size * 1.15} ink={color} dot1={dot} />;
 }
 
 const styles = StyleSheet.create({

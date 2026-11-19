@@ -89,5 +89,5 @@ createServer((req, res) => {
     send(res, status, { error: status === 502 ? 'Source PRIM indisponible' : 'Erreur interne' });
   });
 }).listen(PORT, () => {
-  console.log(`Moteur Pile prêt sur http://localhost:${PORT} (données : ${MODE === 'prim' ? 'PRIM' : 'simulées'})`);
+  console.log(`Moteur Pilepoil prêt sur http://localhost:${PORT} (données : ${MODE === 'prim' ? 'PRIM' : 'simulées'})`);
 });

@@ -1,4 +1,4 @@
-/** Identité visuelle Pile : blanc, violet électrique, vert citron, noir encre. */
+/** Identité visuelle Pilepoil : blanc, violet électrique, vert citron, noir encre. */
 export const colors = {
   bg: '#FFFFFF',
   soft: '#F2F2F5',
