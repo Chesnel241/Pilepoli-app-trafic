@@ -13,6 +13,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
 COPY src ./src
+COPY legal ./legal
 COPY tsconfig.json ./
 
 # Dossier des données apprises (historique des retards, référentiel des lignes).

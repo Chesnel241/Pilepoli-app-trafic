@@ -8,7 +8,7 @@ import { useI18n } from '../lib/settings';
 import { colors, fonts } from '../theme';
 
 /**
- * Confidentialité et mentions légales, lisibles dans l'appli (même texte que PRIVACY.md du dépôt,
+ * Confidentialité et mentions légales, lisibles dans l'appli (même texte que engine/legal/PRIVACY.md du dépôt,
  * dont l'adresse publique sert de lien « politique de confidentialité » dans les stores).
  * Les éléments entre crochets sont à compléter avant publication.
  */

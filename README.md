@@ -74,7 +74,7 @@ Le moteur apprend des passages réels (`engine/src/store/stats.ts`) : pour chaqu
 - Brancher et vérifier les vraies données, pas à pas : `deploy/TEMPS-REEL.md`.
 - Moteur sur un VPS : voir `deploy/LISEZ-MOI.md` (Docker, Nginx, HTTPS, sécurité).
 - Appli sur les stores : même fichier, partie « Stores » (EAS Build).
-- Confidentialité : `PRIVACY.md` (à publier, son adresse sert de lien dans les stores).
+- Confidentialité : `engine/legal/PRIVACY.md`, publiée par le moteur sur `/confidentialite` (lien des fiches stores).
 
 ## Ce qui viendra ensuite
 

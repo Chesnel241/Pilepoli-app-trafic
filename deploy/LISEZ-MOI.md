@@ -136,7 +136,7 @@ npx eas-cli@latest submit --platform android
 ```
 
 ### Fiche store : ce qu'il faut déclarer
-- **Lien de confidentialité** : publie `PRIVACY.md` (par exemple sur `pilepoil.fr/confidentialite`), après avoir complété les crochets.
+- **Lien de confidentialité** : `https://api.pilepoil.fr/confidentialite`, publié par le moteur à partir de `engine/legal/PRIVACY.md` (complète d'abord les crochets ; `/health` affiche `"privacyReady":true` quand c'est fait).
 - **Apple, « Confidentialité de l'app »** : Localisation (précise et approximative), utilisée pour les fonctionnalités de l'app, **non liée** à l'identité, **pas** de suivi. Rien d'autre n'est collecté.
 - **Google, « Sécurité des données »** : Position approximative et précise, traitée de façon éphémère, non partagée, pour les fonctionnalités de l'app. Données chiffrées en transit (HTTPS).
 - **Catégorie** : Navigation (ou Voyages).
@@ -144,7 +144,7 @@ npx eas-cli@latest submit --platform android
 - **Note pour la vérification Apple et Google** : les testeurs sont souvent aux États-Unis. Écris dans la note de vérification : « L'appli couvre l'Île-de-France. Hors de la région, “Autour de toi” est vide : touchez “Modifier” pour choisir “Gare du Nord” comme départ, puis cherchez “La Défense” pour voir un trajet, et ouvrez l'onglet Trafic. Aucun compte n'est nécessaire. »
 
 ### Avant d'appuyer sur « Envoyer »
-- [ ] Crochets complétés dans `PRIVACY.md` et dans l'écran Confidentialité (`mobile/src/app/confidentialite.tsx`).
+- [ ] Crochets complétés dans `engine/legal/PRIVACY.md` et dans l'écran Confidentialité (`mobile/src/app/confidentialite.tsx`).
 - [ ] `https://api.pilepoil.fr/health` répond `"prim":{"up":true…}` et `"lines"` supérieur à 0.
 - [ ] Un trajet réel fait de bout en bout avec le build preview (notifications reçues écran verrouillé).
 - [ ] Test en mode avion pendant un trajet : le guidage continue sur les horaires prévus.

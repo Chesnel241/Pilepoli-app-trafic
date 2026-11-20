@@ -1,3 +1,4 @@
+import { privacyHtml, privacyReady } from './legal.ts';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { rate, stillUpcoming } from './reliability/freshness.ts';
@@ -152,11 +153,23 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   if (req.method !== 'GET') return send(res, 405, { error: 'Méthode non autorisée' });
   if ((req.url ?? '').length > 512) return send(res, 414, { error: 'Requête trop longue' });
 
+  // GET /confidentialite : la politique de confidentialité, publique (lien des fiches App Store et Google Play).
+  if (url.pathname === '/confidentialite' || url.pathname === '/privacy') {
+    res.writeHead(200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer',
+      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'",
+      'Cache-Control': 'public, max-age=3600',
+    });
+    return res.end(privacyHtml);
+  }
+
   // GET /health : l'état du moteur et de sa source, pour la supervision (pas de donnée sensible).
   if (url.pathname === '/health') {
     const primUp = primStatus.lastOk >= primStatus.lastError || primStatus.lastOk === 0;
     return send(res, 200, {
-      ok: true, mode: MODE, version: VERSION,
+      ok: true, mode: MODE, version: VERSION, privacyReady,
       prim: { up: primUp, quotaReached: primStatus.quota, lastOk: primStatus.lastOk ? new Date(primStatus.lastOk).toISOString() : null },
       lines: linesCount(),
     });
