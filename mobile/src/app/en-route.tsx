@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import * as Speech from 'expo-speech';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect, router } from 'expo-router';
 import { guideStops, hhmm, trip } from '../lib/trip';
 import { computeGuide, nextDemoInstant } from '../lib/guide';
 import { IconButton, PulseDot } from '../components/ui';
-import { IconClose, IconWalk } from '../components/icons';
+import { IconClose } from '../components/icons';
 import { TrainTrack } from '../components/TrainTrack';
+import { GuideView } from '../components/GuideView';
 import { colors, fonts } from '../theme';
 
 /** Après Go : la consigne du moment en haut, tous les arrêts en dessous. Rien à toucher. */
@@ -18,10 +20,10 @@ export default function EnRoute() {
   const [tick, setTick] = useState(Date.now());
   const leaving = useRef(false);
   const [boarding, setBoarding] = useState(true);
-  const [walkHidden, setWalkHidden] = useState(false);
+  // Grand affichage pas à pas par défaut ; la liste des arrêts en un tap.
+  const [view, setView] = useState<'guide' | 'list'>('guide');
+  const [voiceOn, setVoiceOn] = useState(false);
   const trainX = useRef(new Animated.Value(-160)).current;
-  const walkX = useRef(new Animated.Value(-8)).current;
-  const walkBounce = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const id = setInterval(() => setTick(Date.now()), 1000);
@@ -44,23 +46,6 @@ export default function EnRoute() {
     };
   }, [trainX]);
 
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(walkX, { toValue: 10, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(walkX, { toValue: -8, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      ]),
-    );
-    const bounce = Animated.loop(
-      Animated.sequence([
-        Animated.timing(walkBounce, { toValue: -5, duration: 350, useNativeDriver: true }),
-        Animated.timing(walkBounce, { toValue: 0, duration: 350, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    bounce.start();
-    return () => { loop.stop(); bounce.stop(); };
-  }, [walkBounce, walkX]);
 
   const now = tick + offset;
   const state = computeGuide(stops, now);
@@ -73,7 +58,7 @@ export default function EnRoute() {
         ? Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
         : Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
       ).catch(() => null);
-      if (state.phase !== 'walking') setWalkHidden(false);
+      if (voiceOn) speak(state.big.speech);
       previousPhase.current = state.phase;
     }
   }, [state.phase]);
@@ -86,6 +71,16 @@ export default function EnRoute() {
       return () => clearTimeout(id);
     }
   }, [state.phase]);
+
+  const speak = (text: string) => {
+    Speech.stop().catch(() => null);
+    Speech.speak(text, { language: 'fr-FR', rate: 0.95 });
+  };
+  const toggleVoice = () => {
+    if (voiceOn) { Speech.stop().catch(() => null); setVoiceOn(false); }
+    else { setVoiceOn(true); speak(state.big.speech); }
+  };
+  useEffect(() => () => { Speech.stop().catch(() => null); }, []);
 
   if (!j) return <Redirect href="/" />;
 
@@ -122,67 +117,57 @@ export default function EnRoute() {
         </Pressable>
       </Modal>
 
-      <Modal
-        visible={!boarding && state.phase === 'walking' && !walkHidden}
-        transparent={false}
-        animationType="fade"
-        onRequestClose={() => setWalkHidden(true)}
-      >
-        <SafeAreaView style={s.walkScreen}>
-          <View style={s.walkHeader}>
-            <Text style={s.walkFrom} numberOfLines={1}>Depuis {stops[state.at]?.name}</Text>
-            <View style={s.walkTime}>
-              <Text style={s.walkTimeText}>train dans {Math.max(1, Math.round(((stops[state.at + 1]?.at ?? now) - now) / 60_000))} min</Text>
-            </View>
-            <IconButton label="Voir tous les arrêts" onPress={() => setWalkHidden(true)}><IconClose /></IconButton>
-          </View>
-          <View style={s.walkHero}>
-            <Animated.View style={{ transform: [{ translateX: walkX }, { translateY: walkBounce }] }}>
-              <View style={s.walkPerson}>
-                <IconWalk size={82} color={colors.ink} />
+
+      <View style={s.top}>
+        <IconButton label="Quitter le guidage" onPress={() => router.back()}><IconClose /></IconButton>
+        <View style={s.switch} accessibilityRole="tablist">
+          {(['guide', 'list'] as const).map((v) => (
+            <Pressable
+              key={v}
+              onPress={() => setView(v)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: view === v }}
+              style={[s.switchItem, view === v && s.switchOn]}
+            >
+              <Text style={[s.switchText, view === v && s.switchTextOn]}>{v === 'guide' ? 'Guidage' : 'Arrêts'}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={s.arrLabel}>Arrivée</Text>
+          <Text style={s.arr}>{hhmm(j.arrivalAt)}</Text>
+        </View>
+      </View>
+
+      {view === 'guide' ? (
+        <View style={s.guideArea}>
+          <GuideView state={state} stops={stops} voiceOn={voiceOn} onVoice={toggleVoice} />
+          <Pressable onPress={demo} style={s.demo} accessibilityRole="button">
+            <Text style={s.demoText}>Démo : faire avancer le trajet</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+          <View style={s.card} accessibilityLiveRegion="polite">
+            <View style={s.cardHead}>
+              <View style={s.row}>
+                <View style={[s.badge, { backgroundColor: c.badgeColor }]}><Text style={[s.badgeText, { color: c.badgeText }]}>{c.badge}</Text></View>
+                <Text style={s.kicker} numberOfLines={1}>{c.kicker}</Text>
               </View>
-            </Animated.View>
-            <Animated.View style={{ transform: [{ translateX: walkX }] }}>
-              <Text style={s.walkArrow}>→</Text>
-            </Animated.View>
-          </View>
-          <View style={s.walkBottom}>
-            <Text style={s.walkEyebrow}>{stops[state.at]?.walkMin ? `À pied · ${stops[state.at].walkMin} min` : 'À pied'}</Text>
-            <Text style={s.walkTitle}>Marche vers le {stops[state.at + 1]?.lineCode}</Text>
-            <Text style={s.walkSub}>{stops[state.at + 1]?.tags.find((tag) => tag.startsWith('Quai')) ?? 'Suivre les panneaux'}</Text>
-            <View style={s.walkProgress}><View style={[s.walkProgressFill, { width: `${Math.round(state.progress * 100)}%` }]} /></View>
-          </View>
-        </SafeAreaView>
-      </Modal>
-
-      <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
-        <View style={s.top}>
-          <IconButton label="Quitter le guidage" onPress={() => router.back()}><IconClose /></IconButton>
-          <View style={{ alignItems: 'flex-end' }}>
-            <Text style={s.arrLabel}>Arrivée</Text>
-            <Text style={s.arr}>{hhmm(j.arrivalAt)}</Text>
-          </View>
-        </View>
-
-        <View style={s.card} accessibilityLiveRegion="polite">
-          <View style={s.cardHead}>
-            <View style={s.row}>
-              <View style={[s.badge, { backgroundColor: c.badgeColor }]}><Text style={[s.badgeText, { color: c.badgeText }]}>{c.badge}</Text></View>
-              <Text style={s.kicker} numberOfLines={1}>{c.kicker}</Text>
+              <View style={s.row}><PulseDot color={colors.lime} /><Text style={s.live}>en direct</Text></View>
             </View>
-            <View style={s.row}><PulseDot color={colors.lime} /><Text style={s.live}>en direct</Text></View>
+            <Text style={s.title}>{c.title}</Text>
+            <Text style={s.sub}>{c.sub}</Text>
+            <View style={s.bar}><View style={[s.barFill, { width: `${Math.round(c.pct * 100)}%` }]} /></View>
           </View>
-          <Text style={s.title}>{c.title}</Text>
-          <Text style={s.sub}>{c.sub}</Text>
-          <View style={s.bar}><View style={[s.barFill, { width: `${Math.round(c.pct * 100)}%` }]} /></View>
-        </View>
 
-        <TrainTrack stops={stops} state={state} now={now} />
+          <TrainTrack stops={stops} state={state} now={now} />
 
-        <Pressable onPress={demo} style={s.demo} accessibilityRole="button">
-          <Text style={s.demoText}>Démo : faire avancer le trajet</Text>
-        </Pressable>
-      </ScrollView>
+          <Pressable onPress={demo} style={s.demo} accessibilityRole="button">
+            <Text style={s.demoText}>Démo : faire avancer le trajet</Text>
+          </Pressable>
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
@@ -203,21 +188,13 @@ const s = StyleSheet.create({
   boardingCopy: { gap: 6, paddingBottom: 24 },
   boardingTitle: { fontFamily: fonts.display, fontSize: 42, lineHeight: 44, color: '#FFFFFF', letterSpacing: -1 },
   boardingSub: { fontFamily: fonts.semi, fontSize: 18, color: colors.violetSoft },
-  walkScreen: { flex: 1, backgroundColor: colors.lime, paddingHorizontal: 22, paddingTop: 12, paddingBottom: 28 },
-  walkHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
-  walkFrom: { flex: 1, fontFamily: fonts.semi, fontSize: 15, color: colors.ink },
-  walkTime: { backgroundColor: colors.ink, borderRadius: 999, paddingVertical: 7, paddingHorizontal: 12 },
-  walkTimeText: { fontFamily: fonts.black, fontSize: 13, color: '#FFFFFF' },
-  walkHero: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
-  walkPerson: { width: 150, height: 150, borderRadius: 75, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
-  walkArrow: { fontFamily: fonts.display, fontSize: 74, lineHeight: 76, color: colors.ink },
-  walkBottom: { gap: 8 },
-  walkEyebrow: { fontFamily: fonts.black, fontSize: 14, color: colors.ink },
-  walkTitle: { fontFamily: fonts.display, fontSize: 36, lineHeight: 38, color: colors.ink, letterSpacing: -0.8 },
-  walkSub: { fontFamily: fonts.bold, fontSize: 17, color: '#3A3D46' },
-  walkProgress: { height: 7, borderRadius: 4, backgroundColor: '#A8CC32', overflow: 'hidden', marginTop: 12 },
-  walkProgressFill: { height: 7, borderRadius: 4, backgroundColor: colors.ink },
-  top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, paddingTop: 8, paddingBottom: 12, gap: 10 },
+  guideArea: { flex: 1, paddingHorizontal: 14, paddingBottom: 8, gap: 10 },
+  switch: { flexDirection: 'row', backgroundColor: colors.soft, borderRadius: 999, padding: 4 },
+  switchItem: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999 },
+  switchOn: { backgroundColor: colors.ink },
+  switchText: { fontFamily: fonts.bold, fontSize: 14, color: colors.muted },
+  switchTextOn: { color: '#FFFFFF' },
   arrLabel: { fontFamily: fonts.semi, fontSize: 13, color: colors.muted },
   arr: { fontFamily: fonts.display, fontSize: 24, color: colors.ink },
   card: { backgroundColor: colors.ink, borderRadius: 28, padding: 18, gap: 10 },

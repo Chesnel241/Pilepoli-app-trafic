@@ -16,6 +16,22 @@ export interface GuideState {
   /** Arrêt mis en avant (panneau de gare). */
   signIdx: number;
   card: { badge: string; badgeColor: string; badgeText: string; kicker: string; title: string; sub: string; pct: number };
+  /** Données du grand affichage pas à pas (lisible de loin, pour tout le monde). */
+  big: {
+    /** Grand chiffre : minutes avant l'action (null = maintenant). */
+    minutes: number | null;
+    /** Ce que le chiffre compte : « avant de descendre », « avant ton train »… */
+    minutesLabel: string;
+    /** Arrêts restants avant de descendre. */
+    stopsLeft?: number;
+    /** Le prochain arrêt, pour se repérer par la fenêtre. */
+    nextStop?: string;
+    /** Où descendre / où aller. */
+    target?: string;
+    direction?: string;
+    /** Phrase lue à voix haute. */
+    speech: string;
+  };
 }
 
 const DWELL_MS = 30_000; // temps passé « à quai » avant de considérer le train reparti
@@ -33,6 +49,7 @@ export function computeGuide(stops: GuideStop[], now: number): GuideState {
     return {
       phase: 'arrived', at: Math.max(0, n - 1), progress: 1, signIdx: Math.max(0, n - 1),
       card: { badge: exit ? exit.replace('Sortie ', '') : '✓', badgeColor: '#C8FF2E', badgeText: '#0E0F12', kicker: 'Tu es arrivé', title: exit ? `Prends la ${exit.toLowerCase()}` : 'Tu es arrivé', sub: stops[n - 1]?.name ?? '', pct: 1 },
+      big: { minutes: null, minutesLabel: '', target: stops[n - 1]?.name, speech: `Tu es arrivé à ${stops[n - 1]?.name ?? 'destination'}.${exit ? ` Prends la ${exit.toLowerCase()}.` : ''}` },
     };
   }
 
@@ -41,6 +58,10 @@ export function computeGuide(stops: GuideStop[], now: number): GuideState {
     return {
       phase: 'before', at: 0, progress: 0, signIdx: 0,
       card: { badge: first.lineCode, badgeColor: first.color, badgeText: '#FFFFFF', kicker: `Vers ${first.direction}`, title: `Monte dans le ${first.lineCode}`, sub: `Train dans ${mins(start - now)} min${first.tags[0] ? `, ${first.tags[0].toLowerCase()}` : ''}`, pct: 0 },
+      big: {
+        minutes: mins(start - now), minutesLabel: 'avant ton train', direction: first.direction, target: first.name,
+        speech: `Va au quai de la ligne ${first.lineCode}, direction ${first.direction}. Ton train arrive dans ${mins(start - now)} minutes.`,
+      },
     };
   }
 
@@ -56,6 +77,10 @@ export function computeGuide(stops: GuideStop[], now: number): GuideState {
     return {
       phase: 'at', at: i, progress: 0, signIdx: i,
       card: { badge: cur.lineCode, badgeColor: cur.color, badgeText: '#FFFFFF', kicker: cur.name, title, sub, pct },
+      big: {
+        minutes: null, minutesLabel: 'maintenant', target: cur.name, nextStop: next?.name,
+        speech: `${title}. ${sub}.`,
+      },
     };
   }
 
@@ -63,6 +88,10 @@ export function computeGuide(stops: GuideStop[], now: number): GuideState {
     return {
       phase: 'walking', at: i, progress, signIdx: i + 1,
       card: { badge: next.lineCode, badgeColor: next.color, badgeText: '#FFFFFF', kicker: 'Correspondance', title: `Rejoins le quai du ${next.lineCode}`, sub: `${next.tags.find((t) => t.startsWith('Quai')) ?? 'Suis les panneaux'}, train dans ${mins(next.at - now)} min`, pct },
+      big: {
+        minutes: mins(next.at - now), minutesLabel: 'avant ton train', direction: next.direction, target: next.lineCode,
+        speech: `Change pour la ligne ${next.lineCode}, direction ${next.direction}. Suis les panneaux. Ton train part dans ${mins(next.at - now)} minutes.`,
+      },
     };
   }
 
@@ -78,6 +107,13 @@ export function computeGuide(stops: GuideStop[], now: number): GuideState {
       title: isNext ? 'C’est le prochain !' : `Descends à ${short(stops[target].name)}`,
       sub: isNext ? `Descends à ${short(stops[target].name)} dans ${mins(stops[target].at - now)} min` : `Dans ${mins(stops[target].at - now)} min, ${count} arrêts`,
       pct,
+    },
+    big: {
+      minutes: mins(stops[target].at - now), minutesLabel: 'avant de descendre', stopsLeft: count,
+      nextStop: next.name, target: stops[target].name, direction: cur.direction,
+      speech: isNext
+        ? `Prépare-toi. Tu descends au prochain arrêt, ${stops[target].name}.`
+        : `Reste dans le train. Tu descends à ${stops[target].name}, dans ${count} arrêts, environ ${mins(stops[target].at - now)} minutes.`,
     },
   };
 }
