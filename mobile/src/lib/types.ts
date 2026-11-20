@@ -82,6 +82,8 @@ export interface Disruption {
   message: string;
   start?: string;
   end?: string;
+  /** Pas encore en cours (travaux prévus). */
+  upcoming?: boolean;
 }
 
 export interface LineTraffic {
@@ -119,4 +121,6 @@ export interface Exit {
   name: string;
   number?: string;
   accessible?: boolean;
+  lat?: number;
+  lon?: number;
 }

@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { trip } from '../lib/trip';
 import { fetchExits } from '../lib/api';
 import type { Exit } from '../lib/types';
+import { meters, type LonLat } from '../lib/route';
 import { BigButton } from '../components/ui';
 import { IconArrowLeft, IconEscalator } from '../components/icons';
 import { colors, fonts } from '../theme';
@@ -23,10 +24,19 @@ export default function Arrivee() {
 
   // Les vraies sorties de la gare (données IDFM). On ne prétend pas savoir laquelle est la meilleure
   // si le calcul d'itinéraire ne l'a pas dit : on les liste, simplement.
-  const [exits, setExits] = useState<Exit[]>([]);
+  const [rawExits, setExits] = useState<Exit[]>([]);
   useEffect(() => {
     if (lastLeg?.toId) fetchExits(lastLeg.toId).then(setExits);
   }, [lastLeg?.toId]);
+
+  // Ta vraie destination (fin de la dernière marche) : on classe les sorties de la plus proche à la plus lointaine.
+  const finalWalk = j?.legs[j.legs.length - 1]?.mode === 'walk' ? j.legs[j.legs.length - 1] : undefined;
+  const dest: LonLat | undefined = finalWalk?.path?.[finalWalk.path.length - 1];
+  const exits = rawExits
+    .map((e) => ({ ...e, dist: dest && e.lat !== undefined && e.lon !== undefined ? Math.round(meters(dest, [e.lon, e.lat])) : undefined }))
+    .sort((a, b) => (a.dist ?? 1e9) - (b.dist ?? 1e9));
+  // Conseil seulement si on a vraiment de quoi comparer (au moins deux sorties situées).
+  const best = !exitNum && exits.filter((e) => e.dist !== undefined).length >= 2 ? exits[0] : undefined;
 
   const bob = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -42,8 +52,13 @@ export default function Arrivee() {
     <View style={s.screen}>
       <SafeAreaView edges={['top']} style={s.hero}>
         <View style={s.chip}><Text style={s.chipText}>{t('arr.youAreAt', { name: lastLeg?.to ?? t('g.destination') })}</Text></View>
-        <Text style={s.lead}>{exitNum ? t('arr.takeThe') : t('arr.arrived')}</Text>
-        {exitNum ? (
+        <Text style={s.lead}>{exitNum ? t('arr.takeThe') : best ? t('arr.closest') : t('arr.arrived')}</Text>
+        {best ? (
+          <View style={{ gap: 4 }}>
+            <Text style={s.place}>{best.number ? `${t('arr.exitGeneric')} ${best.number} · ` : ''}{best.name}</Text>
+            {best.dist !== undefined ? <Text style={s.bestDist}>{t('arr.toDest', { n: best.dist })}</Text> : null}
+          </View>
+        ) : exitNum ? (
           <View style={s.exitRow}>
             <Animated.View style={[s.exitBadge, { transform: [{ translateY: bob.interpolate({ inputRange: [0, 1], outputRange: [0, -5] }) }] }]}>
               <Text style={s.exitWord}>{t('arr.exitWord')}</Text>
@@ -61,7 +76,7 @@ export default function Arrivee() {
       <SafeAreaView edges={['bottom']} style={s.body}>
         <View style={s.step}>
           <View style={[s.stepIcon, { backgroundColor: colors.ink }]}><IconArrowLeft /></View>
-          <Text style={s.stepText}>{t('arr.step1', { exit: exitNum ? `${t('arr.exitGeneric')} ${exitNum}` : t('arr.exitGeneric') })}</Text>
+          <Text style={s.stepText}>{t('arr.step1', { exit: exitNum ? `${t('arr.exitGeneric')} ${exitNum}` : best ? best.name : t('arr.exitGeneric') })}</Text>
         </View>
         <View style={s.step}>
           <View style={s.stepIcon}><IconEscalator /></View>
@@ -72,9 +87,10 @@ export default function Arrivee() {
             <Text style={s.h2}>{exitNum ? t('arr.allExits') : t('arr.stationExits')}</Text>
             <ScrollView contentContainerStyle={{ gap: 8 }} showsVerticalScrollIndicator={false}>
               {exits.map((e) => (
-                <View key={e.id} style={[s.exit, e.number && e.number === exitNum && s.exitOn]}>
+                <View key={e.id} style={[s.exit, ((e.number && e.number === exitNum) || e.id === best?.id) && s.exitOn]}>
                   <View style={s.exitChip}><Text style={s.exitChipText}>{e.number ?? '•'}</Text></View>
                   <Text style={s.exitName} numberOfLines={2}>{e.name}</Text>
+                  {e.dist !== undefined ? <Text style={s.exitDist}>{e.dist} m</Text> : null}
                   {e.accessible ? <Text accessibilityLabel={t('common.accessible')}>♿</Text> : null}
                 </View>
               ))}
@@ -108,5 +124,7 @@ const s = StyleSheet.create({
   exitChip: { minWidth: 32, height: 32, borderRadius: 9, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   exitChipText: { fontFamily: fonts.display, fontSize: 16, color: colors.lime },
   exitName: { flex: 1, fontFamily: fonts.semi, fontSize: 15, color: colors.ink },
+  bestDist: { fontFamily: fonts.bold, fontSize: 15, color: '#2B2E14' },
+  exitDist: { fontFamily: fonts.semi, fontSize: 13, color: colors.muted },
   note: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted, textAlign: 'center' },
 });

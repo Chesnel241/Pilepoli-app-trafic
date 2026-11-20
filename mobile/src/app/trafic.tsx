@@ -105,6 +105,7 @@ export default function Trafic() {
                     <View key={x.id} style={{ gap: 4 }}>
                       {l.disruptions.length > 1 ? <Text style={s.subTitle}>{x.title}</Text> : null}
                       {x.message ? <Text style={s.msg}>{x.message}</Text> : null}
+                      {x.upcoming && x.start ? <Text style={s.until}>{t('traffic.from', { date: fmt(x.start) })}</Text> : null}
                       {x.end ? <Text style={s.until}>{t('traffic.until', { date: fmt(x.end) })}</Text> : null}
                     </View>
                   ))}

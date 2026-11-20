@@ -5,8 +5,10 @@ import type { Departure, RatedDeparture, Reliability } from '../types.ts';
  * Au-delà de DIRECT_MAX on ne dit plus « en direct » ; au-delà d'ESTIME_MAX on dit « pas vu ».
  * Ces valeurs sont un point de départ : elles seront ajustées ligne par ligne avec l'historique.
  */
-export const DIRECT_MAX = 60;
-export const ESTIME_MAX = 180;
+// Calés sur les vrais flux PRIM : les transporteurs rafraîchissent environ toutes les 60 s,
+// et l'info arrive avec quelques secondes de délai. 90 s = « dernier cycle de mise à jour ».
+export const DIRECT_MAX = 90;
+export const ESTIME_MAX = 240;
 
 const CANCELLED = new Set(['cancelled', 'canceled']);
 

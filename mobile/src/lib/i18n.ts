@@ -175,6 +175,8 @@ const fr = {
   'arr.allExits': 'Toutes les sorties',
   'arr.stationExits': 'Les sorties de la gare',
   'arr.done': 'Terminer',
+  'arr.closest': 'La sortie la plus proche de ta destination',
+  'arr.toDest': 'à {n} m de ta destination',
 
   // Trafic
   'traffic.looking': 'On regarde…',
@@ -194,6 +196,7 @@ const fr = {
   'traffic.more': '+ {n} autre',
   'traffic.morePlural': '+ {n} autres',
   'traffic.until': 'Jusqu’au {date}',
+  'traffic.from': 'À partir du {date}',
   'traffic.frenchOnly': 'Les messages des transporteurs sont en français.',
   'lvl.ok': 'Ça roule',
   'lvl.info': 'Info',
@@ -432,6 +435,8 @@ const en: Record<Key, string> = {
   'arr.allExits': 'All exits',
   'arr.stationExits': 'Station exits',
   'arr.done': 'Done',
+  'arr.closest': 'The exit closest to your destination',
+  'arr.toDest': '{n} m from your destination',
   'traffic.looking': 'Checking…',
   'traffic.allGood': 'All running.',
   'traffic.oneBig': '1 major line disrupted.',
@@ -449,6 +454,7 @@ const en: Record<Key, string> = {
   'traffic.more': '+ {n} more',
   'traffic.morePlural': '+ {n} more',
   'traffic.until': 'Until {date}',
+  'traffic.from': 'From {date}',
   'traffic.frenchOnly': 'Operator messages are in French.',
   'lvl.ok': 'Running',
   'lvl.info': 'Info',
