@@ -63,9 +63,9 @@ export function keyStops(stops: GuideStop[]) {
  * Carte du trajet en haut du guidage, façon écran de vol : vrai fond de carte, tracé épais,
  * étiquettes noires, et le véhicule qui avance. Un bandeau dit ce qu'il reste. Un tap ouvre la carte entière.
  */
-export function RouteCard({ journey, route, stops, now, fix, mode, onOpen, toName }: {
+export function RouteCard({ journey, route, stops, now, fix, mode, onOpen, toName, height = 170 }: {
   journey: Journey; route: Route | null; stops: GuideStop[]; now: number; fix: Fix | null; mode: LegMode;
-  onOpen: () => void; toName: string;
+  onOpen: () => void; toName: string; height?: number;
 }) {
   const map = useRef<MapView>(null);
   const track = useFrozenMarkers([route, stops.length, mode]);
@@ -73,6 +73,7 @@ export function RouteCard({ journey, route, stops, now, fix, mode, onOpen, toNam
   const labels = useMemo(() => keyStops(stops), [stops]);
   const color = stops.find((st) => st.mode === mode)?.color ?? colors.violet;
 
+  // Ce qu'il reste : horaires prévus décalés sur la réalité (now = instant « horaires » de là où tu es).
   const left = Math.max(0, Math.round((Date.parse(journey.arrivalAt) - now) / 60_000));
   const kmLeft = route && here ? Math.max(0, (route.length * (1 - here.fraction)) / 1000) : null;
 
@@ -83,7 +84,7 @@ export function RouteCard({ journey, route, stops, now, fix, mode, onOpen, toNam
   };
 
   return (
-    <Pressable onPress={onOpen} style={s.card} accessibilityRole="button" accessibilityHint={t('map.open')}
+    <Pressable onPress={onOpen} style={[s.card, { height }]} accessibilityRole="button" accessibilityHint={t('map.open')}
       accessibilityLabel={`${t('map.left', { n: left })}, ${t('choice.arrival', { time: hhmm(journey.arrivalAt) })}`}>
       {route ? (
         <View style={StyleSheet.absoluteFill} pointerEvents="none">

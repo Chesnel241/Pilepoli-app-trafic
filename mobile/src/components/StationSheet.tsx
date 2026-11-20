@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { CloseButton, FullModal } from './FullModal';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Text } from './Text';
@@ -10,7 +11,7 @@ import type { NearbyStop, RatedDeparture } from '../lib/types';
 import { colors, fonts, radius } from '../theme';
 
 /** Feuille d'une station touchée sur la carte : tous ses passages, par ligne et par sens, mis à jour en direct. */
-export function StationSheet({ stop, onClose }: { stop: NearbyStop | null; onClose: () => void }) {
+export function StationSheet({ stop, onClose, onLeave }: { stop: NearbyStop | null; onClose: () => void; onLeave?: () => void }) {
   const [deps, setDeps] = useState<RatedDeparture[] | null>(null);
 
   useEffect(() => {
@@ -27,13 +28,21 @@ export function StationSheet({ stop, onClose }: { stop: NearbyStop | null; onClo
   }, [stop?.stopRef]);
 
   if (!stop) return null;
+  // À plus de 80 m : on propose d'y aller à pied, avec le GPS piéton.
+  const far = stop.distance > 80;
+  const walk = () => {
+    onClose();
+    onLeave?.();
+    router.push({ pathname: '/marche', params: { to: stop.placeId, name: stop.name, area: stop.areaNumber, ...(stop.lat !== undefined ? { lat: String(stop.lat), lon: String(stop.lon) } : {}) } });
+  };
   const openStop = () => {
     onClose();
-    router.push({ pathname: '/arret', params: { ref: stop.stopRef, area: stop.areaNumber, name: stop.name } });
+    onLeave?.();
+    router.push({ pathname: '/arret', params: { ref: stop.stopRef, area: stop.areaNumber, name: stop.name, place: stop.placeId, dist: String(stop.distance), ...(stop.lat !== undefined ? { lat: String(stop.lat), lon: String(stop.lon) } : {}) } });
   };
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+    <FullModal visible transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={s.backdrop} onPress={onClose} accessibilityLabel={t('common.close')} />
       <SafeAreaView edges={['bottom']} style={s.sheet}>
         <View style={s.grabber} />
@@ -46,11 +55,16 @@ export function StationSheet({ stop, onClose }: { stop: NearbyStop | null; onClo
             <Text style={s.allText}>{t('stop.seeAll')} ›</Text>
           </Pressable>
         </View>
+        {far ? (
+          <Pressable onPress={walk} style={s.walk} accessibilityRole="button">
+            <Text style={s.walkText}>🚶 {t('walk.go')} · {t('walk.minWalk', { n: Math.max(1, Math.round(stop.distance / 75)) })}</Text>
+          </Pressable>
+        ) : null}
         <ScrollView contentContainerStyle={s.body} showsVerticalScrollIndicator={false}>
           {deps === null ? <ActivityIndicator color={colors.violet} /> : deps.length === 0 ? <Text style={s.empty}>{t('stop.none')}</Text> : <DepartureBoard departures={deps} max={8} />}
         </ScrollView>
       </SafeAreaView>
-    </Modal>
+    </FullModal>
   );
 }
 
@@ -63,6 +77,8 @@ const s = StyleSheet.create({
   sub: { fontFamily: fonts.semi, fontSize: 14, color: colors.muted },
   all: { backgroundColor: colors.ink, borderRadius: radius.pill, paddingVertical: 10, paddingHorizontal: 14 },
   allText: { fontFamily: fonts.black, fontSize: 14, color: colors.lime },
+  walk: { marginHorizontal: 20, marginBottom: 12, minHeight: 52, borderRadius: radius.pill, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center' },
+  walkText: { fontFamily: fonts.black, fontSize: 16, color: colors.ink },
   body: { paddingHorizontal: 20, paddingBottom: 20, gap: 12 },
   empty: { fontFamily: fonts.medium, fontSize: 16, color: colors.muted },
 });

@@ -75,6 +75,17 @@ export interface StopSnapshot {
 
 export type LegMode = 'walk' | 'metro' | 'rer' | 'train' | 'tram' | 'bus' | 'cable' | 'boat' | 'other';
 
+/**
+ * Une consigne de marche : à partir de ce point, suivre `name` sur `length` mètres.
+ * `turn` est l'angle du virage par rapport à la direction précédente (négatif = à gauche, positif = à droite).
+ */
+export interface WalkInstruction {
+  name: string;
+  length: number;
+  turn: number;
+  at?: [number, number];
+}
+
 export interface JourneyStop {
   name: string;
   at: string; // ISO
@@ -103,6 +114,10 @@ export interface JourneyLeg {
   stops: JourneyStop[];
   /** Tracé simplifié du tronçon, en [lon, lat] (pour la carte). */
   path?: [number, number][];
+  /** Marche : les consignes rue par rue (virage, rue, distance). */
+  walk?: WalkInstruction[];
+  /** Longueur du tronçon en mètres (marche surtout). */
+  length?: number;
   /** Conseils pratiques (tête de train, sortie...). */
   tips: string[];
 }

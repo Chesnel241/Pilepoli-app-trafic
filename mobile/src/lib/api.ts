@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Exit, Journey, NearbyStop, NetworkLine, Place, StopSnapshot, TrafficReport } from './types';
+import type { Exit, Journey, JourneyLeg, NearbyStop, NetworkLine, Place, StopSnapshot, TrafficReport } from './types';
 
 /**
  * Client du moteur Pilepoil. Uniquement des données réelles (PRIM, Île-de-France Mobilités).
@@ -129,3 +129,13 @@ export async function fetchLines(): Promise<NetworkLine[]> {
 
 /** stop_area:IDFM:71410 → STIF:StopArea:SP:71410: (référence des prochains passages). */
 export const stopRefOf = (placeId: string) => `STIF:StopArea:SP:${placeId.split(':').pop()}:`;
+
+/** Itinéraire à pied détaillé, de ta position (« lon;lat ») vers une gare ou un point. null si indisponible. */
+export async function fetchWalk(from: string, to: string): Promise<JourneyLeg | null> {
+  try {
+    const r = await get<{ leg: JourneyLeg }>(`/walk?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+    return r.leg ?? null;
+  } catch {
+    return null;
+  }
+}

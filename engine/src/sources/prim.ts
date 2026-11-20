@@ -1,5 +1,5 @@
 import { coordOf, simplify } from '../geo/simplify.ts';
-import type { Departure, Journey, JourneyLeg, LegMode, Place } from '../types.ts';
+import type { Departure, Journey, JourneyLeg, LegMode, Place, WalkInstruction } from '../types.ts';
 import { weakest } from '../reliability/freshness.ts';
 
 /**
@@ -110,11 +110,30 @@ function modeOf(section: any): LegMode {
   return 'other';
 }
 
+/** Consignes rue par rue d'un tronçon à pied (Navitia `path`), et sa longueur. */
+export function walkOf(s: any): { walk?: WalkInstruction[]; length?: number } {
+  if (s?.type !== 'street_network' && s?.type !== 'transfer' && s?.mode !== 'walking') return {};
+  const items: any[] = Array.isArray(s.path) ? s.path : [];
+  const walk = items
+    .filter((p) => Number(p?.length) > 0)
+    .map((p) => {
+      const c = coordOf(p.instruction_start_coordinate);
+      return {
+        name: String(p.name ?? '').trim(),
+        length: Math.round(Number(p.length)),
+        turn: Math.round(Number(p.direction ?? 0)),
+        ...(c ? { at: [c.lon, c.lat] as [number, number] } : {}),
+      };
+    });
+  const length = walk.reduce((a, w) => a + w.length, 0) || (Number(s.geojson?.properties?.[0]?.length) || undefined);
+  return { ...(walk.length ? { walk } : {}), ...(length ? { length } : {}) };
+}
+
 export function parseJourneys(json: any): Journey[] {
   const journeys: any[] = json?.journeys ?? [];
   return journeys.map((j, idx) => {
     const legs: JourneyLeg[] = (j.sections ?? [])
-      .filter((s: any) => ['public_transport', 'street_network', 'transfer'].includes(s.type) && (s.duration ?? 0) > 0)
+      .filter((s: any) => ['public_transport', 'street_network', 'transfer', 'crow_fly'].includes(s.type) && (s.duration ?? 0) > 0)
       .map((s: any): JourneyLeg => {
         const di = s.display_informations ?? {};
         return {
@@ -137,6 +156,7 @@ export function parseJourneys(json: any): Journey[] {
             ...coordOf(st.stop_point?.coord),
           })),
           path: simplify(s.geojson?.coordinates),
+          ...walkOf(s),
           tips: [],
         };
       });
@@ -181,6 +201,15 @@ export async function direct(from: string, to: string, apiKey: string): Promise<
     'first_section_mode[]': 'walking', 'last_section_mode[]': 'walking', max_walking_duration_to_pt: 300,
   }, apiKey);
   return parseDirect(json);
+}
+
+/** Itinéraire à pied seul, d'une position (« lon;lat ») vers une gare ou une adresse. */
+export async function walkTo(from: string, to: string, apiKey: string): Promise<JourneyLeg | null> {
+  const json = await get('/v2/navitia/journeys', {
+    from, to, count: 1, direct_path: 'only', 'direct_path_mode[]': 'walking', 'first_section_mode[]': 'walking', 'last_section_mode[]': 'walking',
+  }, apiKey);
+  const j = parseJourneys(json)[0];
+  return j?.legs.find((l) => l.mode === 'walk') ?? null;
 }
 
 export async function journeys(from: string, to: string, apiKey: string): Promise<Journey[]> {

@@ -11,7 +11,15 @@ import { isExitTip, t } from '../lib/i18n';
  * Le fil du trajet, discret : les arrêts passés sont barrés,
  * le prochain « respire » doucement, les suivants s'estompent avec la distance.
  */
-export function TrainTrack({ stops, state, now }: { stops: GuideStop[]; state: GuideState; now: number }) {
+/**
+ * `here` dit ce que l'on sait vraiment de ta position :
+ * - walking : tu marches vers ce prochain arrêt (on affiche le temps de marche, pas « Tu y es ») ;
+ * - at : tu y es, constaté par le GPS ;
+ * - estimated : position déduite des horaires (souterrain), on ne prétend pas que tu y es.
+ */
+export type Here = { kind: 'walking'; minutes: number } | { kind: 'at' } | { kind: 'estimated' };
+
+export function TrainTrack({ stops, state, now, here }: { stops: GuideStop[]; state: GuideState; now: number; here?: Here }) {
   const moving = state.phase === 'moving' || state.phase === 'walking';
   const nextIdx = state.phase === 'arrived' ? -1 : moving ? state.at + 1 : state.at;
 
@@ -48,7 +56,7 @@ export function TrainTrack({ stops, state, now }: { stops: GuideStop[]; state: G
 
             <View style={[s.info, !last && s.infoWithLine]}>
               {isNext ? (
-                <NextStop stop={stop} mins={mins} current={!moving} />
+                <NextStop stop={stop} mins={mins} current={!moving} here={here} />
               ) : (
                 <View style={s.plain}>
                   <Text
@@ -72,7 +80,7 @@ export function TrainTrack({ stops, state, now }: { stops: GuideStop[]; state: G
 }
 
 /** Le prochain arrêt : un léger zoom qui respire, en continu. */
-function NextStop({ stop, mins, current }: { stop: GuideStop; mins: number; current: boolean }) {
+function NextStop({ stop, mins, current, here }: { stop: GuideStop; mins: number; current: boolean; here?: Here }) {
   const scale = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     const loop = Animated.loop(Animated.sequence([
@@ -86,7 +94,11 @@ function NextStop({ stop, mins, current }: { stop: GuideStop; mins: number; curr
     <Animated.View style={[s.next, { transform: [{ scale }] }]}>
       <View style={s.nextHead}>
         <Text style={s.nextName} numberOfLines={2}>{stop.name}</Text>
-        <Text style={s.nextEta}>{current ? t('guide.youAreThere') : mins <= 0 ? t('guide.nowShort') : `${mins} ${t('common.min')}`}</Text>
+        <Text style={s.nextEta}>
+          {here?.kind === 'walking' ? t('walk.minWalk', { n: here.minutes })
+            : current ? (here?.kind === 'estimated' ? `≈ ${t('guide.nowShort')}` : t('guide.youAreThere'))
+            : mins <= 0 ? t('guide.nowShort') : `${here?.kind === 'estimated' ? '≈ ' : ''}${mins} ${t('common.min')}`}
+        </Text>
       </View>
       {stop.tags.length ? (
         <View style={s.tags}>

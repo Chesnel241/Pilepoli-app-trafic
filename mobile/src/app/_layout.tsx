@@ -40,6 +40,7 @@ function Root() {
         {/* Pendant le guidage, pas de retour par glissement accidentel. */}
         <Stack.Screen name="en-route" options={{ gestureEnabled: false }} />
         <Stack.Screen name="bienvenue" options={{ gestureEnabled: false, animation: 'fade' }} />
+        <Stack.Screen name="marche" options={{ animation: 'slide_from_bottom' }} />
       </Stack>
     </>
   );

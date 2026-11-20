@@ -67,7 +67,7 @@ export function GuideView({ state, stops, voiceOn, onVoice }: {
         {state.phase !== 'arrived' ? (
           <ModeAnimation
             mode={state.phase === 'walking' ? 'walk' : (stops[state.at]?.mode ?? 'metro')}
-            size={64}
+            size={52}
             ink={state.phase === 'moving' ? '#FFFFFF' : colors.ink}
             glass={state.phase === 'moving' ? colors.violet : state.phase === 'walking' ? colors.lime : '#FFFFFF'}
             accent={state.phase === 'moving' ? colors.lime : state.phase === 'walking' ? '#FFFFFF' : colors.lime}
@@ -88,7 +88,7 @@ export function GuideView({ state, stops, voiceOn, onVoice }: {
           <>
             {/* Le chiffre géant garde sa taille : il est déjà fait pour être lu de loin. */}
             <FixedText allowFontScaling={false} style={[s.bigNum, { color: state.phase === 'moving' ? colors.lime : t.fg }]}>{b.minutes}</FixedText>
-            <View style={{ paddingBottom: 18 }}>
+            <View style={{ paddingBottom: 14 }}>
               <Text style={[s.bigUnit, { color: state.phase === 'moving' ? colors.lime : t.fg }]}>{tr('common.min')}</Text>
               <Text style={[s.bigLabel, { color: t.sub }]}>{b.minutesLabel}</Text>
             </View>
@@ -137,26 +137,26 @@ export function GuideView({ state, stops, voiceOn, onVoice }: {
 
 const s = StyleSheet.create({
   outer: { flex: 1, borderRadius: 32 },
-  wrap: { flexGrow: 1, padding: 22, gap: 18 },
+  wrap: { flexGrow: 1, padding: 18, gap: 14 },
   lineRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  lineBadge: { width: 64, height: 64, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  lineBadgeText: { fontFamily: fonts.display, fontSize: 34 },
+  lineBadge: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  lineBadgeText: { fontFamily: fonts.display, fontSize: 27 },
   kicker: { fontFamily: fonts.bold, fontSize: 16 },
   direction: { fontFamily: fonts.bold, fontSize: 20, lineHeight: 24 },
-  title: { fontFamily: fonts.display, fontSize: 46, lineHeight: 48, letterSpacing: -1 },
-  targetLine: { fontFamily: fonts.display, fontSize: 28, lineHeight: 32, marginTop: -8 },
+  title: { fontFamily: fonts.display, fontSize: 36, lineHeight: 39, letterSpacing: -0.8 },
+  targetLine: { fontFamily: fonts.display, fontSize: 22, lineHeight: 26, marginTop: -6 },
   bigRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, alignSelf: 'flex-start' },
-  bigNum: { fontFamily: fonts.display, fontSize: 132, lineHeight: 132, letterSpacing: -5 },
-  bigUnit: { fontFamily: fonts.display, fontSize: 36, lineHeight: 38 },
+  bigNum: { fontFamily: fonts.display, fontSize: 100, lineHeight: 102, letterSpacing: -4 },
+  bigUnit: { fontFamily: fonts.display, fontSize: 30, lineHeight: 32 },
   bigLabel: { fontFamily: fonts.bold, fontSize: 16 },
-  now: { fontFamily: fonts.display, fontSize: 64, lineHeight: 68, letterSpacing: -2 },
+  now: { fontFamily: fonts.display, fontSize: 50, lineHeight: 54, letterSpacing: -1.5 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { flexDirection: 'row', alignItems: 'baseline', gap: 6, borderRadius: 16, paddingVertical: 10, paddingHorizontal: 14 },
-  chipBig: { fontFamily: fonts.display, fontSize: 26 },
-  chipText: { fontFamily: fonts.bold, fontSize: 17 },
+  chipBig: { fontFamily: fonts.display, fontSize: 22 },
+  chipText: { fontFamily: fonts.bold, fontSize: 15 },
   exitChip: { backgroundColor: colors.ink },
   bar: { height: 8, borderRadius: 4, overflow: 'hidden' },
   barFill: { height: 8, borderRadius: 4 },
-  voice: { height: 64, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
+  voice: { height: 54, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
   voiceText: { fontFamily: fonts.black, fontSize: 18 },
 });

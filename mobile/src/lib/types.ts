@@ -51,6 +51,9 @@ export interface StopSnapshot {
   failure?: 'offline' | 'unavailable' | 'quota';
 }
 
+/** Consigne de marche : à partir de `at`, suivre `name` sur `length` m ; `turn` = angle du virage (négatif = gauche). */
+export interface WalkInstruction { name: string; length: number; turn: number; at?: [number, number] }
+
 export type LegMode = 'walk' | 'metro' | 'rer' | 'train' | 'tram' | 'bus' | 'cable' | 'boat' | 'other';
 
 export interface JourneyLeg {
@@ -71,6 +74,10 @@ export interface JourneyLeg {
   stops: { name: string; at: string; lat?: number; lon?: number }[];
   /** Tracé simplifié en [lon, lat]. */
   path?: [number, number][];
+  /** Marche : consignes rue par rue. */
+  walk?: WalkInstruction[];
+  /** Longueur en mètres. */
+  length?: number;
   tips: string[];
 }
 

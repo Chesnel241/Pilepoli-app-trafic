@@ -106,6 +106,7 @@ const limiter = new RateLimiter(RATE_PER_MIN, Math.max(20, Math.round(RATE_PER_M
 const placesCache = new TtlCache<Place[]>(10 * 60_000);
 const journeysCache = new TtlCache<Journey[]>(30_000, 500);
 const directCache = new TtlCache<prim.DirectRide[]>(60_000, 2000);
+const walkCache = new TtlCache<Awaited<ReturnType<typeof prim.walkTo>>>(5 * 60_000, 2000);
 const nearbyCache = new TtlCache<Awaited<ReturnType<typeof prim.nearby>>>(5 * 60_000, 2000);
 
 function tokenOk(req: IncomingMessage): boolean {
@@ -222,6 +223,18 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     const a = normEndpoint(from), b = normEndpoint(to);
     const list = await journeysCache.wrap(`${a}>${b}`, () => call(prim.journeys(a, b, API_KEY)));
     return send(res, 200, { journeys: list, source: MODE });
+  }
+
+  // GET /walk?from=lon;lat&to=… : itinéraire piéton détaillé (tracé + consignes rue par rue)
+  if (url.pathname === '/walk') {
+    const from = url.searchParams.get('from');
+    const to = url.searchParams.get('to');
+    if (!isEndpoint(from) || !isEndpoint(to)) return send(res, 400, { error: 'Paramètres from et to obligatoires' });
+    const a = normEndpoint(from), b = normEndpoint(to);
+    // Arrondi du départ à ~10 m pour partager le cache entre deux recalculs rapprochés.
+    const key = `${a.replace(/(\d+\.\d{4})\d+/g, '$1')}>${b}`;
+    const leg = await walkCache.wrap(key, () => call(prim.walkTo(a, b, API_KEY)));
+    return send(res, leg ? 200 : 404, leg ? { leg } : { error: 'Pas d’itinéraire à pied' });
   }
 
   // GET /places?q=...

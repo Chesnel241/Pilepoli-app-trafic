@@ -24,3 +24,17 @@ test('parseJourneys : coordonnées des arrêts et tracé', () => {
   assert.equal(j.legs[0].stops[0].lat, 48.85);
   assert.ok(j.legs[0].path && j.legs[0].path.length >= 2);
 });
+
+test('marche : consignes rue par rue lues dans Navitia', async () => {
+  const { walkOf } = await import('../src/sources/prim.ts');
+  const w = walkOf({ type: 'street_network', mode: 'walking', path: [
+    { name: 'Rue de Dunkerque', length: 120, direction: 0, instruction_start_coordinate: { lon: '2.3553', lat: '48.8809' } },
+    { name: 'Boulevard de Magenta', length: 80.4, direction: -90 },
+    { name: '', length: 0, direction: 0 },
+  ] });
+  assert.equal(w.walk?.length, 2);
+  assert.equal(w.walk?.[1].turn, -90);
+  assert.deepEqual(w.walk?.[0].at, [2.3553, 48.8809]);
+  assert.equal(w.length, 200);
+  assert.deepEqual(walkOf({ type: 'public_transport' }), {});
+});

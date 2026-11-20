@@ -1,10 +1,9 @@
 import { useMemo, useRef } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { CloseButton, FullModal } from './FullModal';
 import MapView from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from './Text';
-import { IconButton } from './ui';
-import { IconClose } from './icons';
 import { PlaceLabel, mapLook, useFrozenMarkers } from './MapBits';
 import { RouteLines, VehicleMarker, keyStops } from './RouteCard';
 import { t } from '../lib/i18n';
@@ -36,7 +35,7 @@ export function RouteMap({ visible, onClose, route, stops, here, source, mode }:
   };
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose} presentationStyle="fullScreen">
+    <FullModal visible={visible} animationType="slide" onRequestClose={onClose} presentationStyle="fullScreen">
       <View style={s.screen}>
         <MapView ref={map} style={StyleSheet.absoluteFill} {...mapLook} showsUserLocation showsMyLocationButton={false} onMapReady={fit}>
           <RouteLines route={route} width={6} />
@@ -52,7 +51,7 @@ export function RouteMap({ visible, onClose, route, stops, here, source, mode }:
 
         <SafeAreaView style={s.overlay} pointerEvents="box-none">
           <View style={s.top} pointerEvents="box-none">
-            <IconButton label={t('map.close')} onPress={onClose}><IconClose /></IconButton>
+            <CloseButton onPress={onClose} />
             <Pressable onPress={recenter} style={s.recenter} accessibilityRole="button">
               <Text style={s.recenterText}>{t('map.recenter')}</Text>
             </Pressable>
@@ -62,7 +61,7 @@ export function RouteMap({ visible, onClose, route, stops, here, source, mode }:
           ) : null}
         </SafeAreaView>
       </View>
-    </Modal>
+    </FullModal>
   );
 }
 

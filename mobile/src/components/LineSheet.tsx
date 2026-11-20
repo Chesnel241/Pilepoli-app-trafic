@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { CloseButton, FullModal } from './FullModal';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from './Text';
 import { LineBadge } from './ui';
@@ -29,7 +30,7 @@ export function LineSheet({ line, onClose }: { line: SheetLine | null; onClose: 
   const later = line.disruptions.filter((d) => d.upcoming);
   const lv = LEVEL[line.level];
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+    <FullModal visible transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={s.backdrop} onPress={onClose} accessibilityLabel={t('common.close')} />
       <SafeAreaView edges={['bottom']} style={s.sheet}>
         <View style={s.grabber} />
@@ -54,7 +55,7 @@ export function LineSheet({ line, onClose }: { line: SheetLine | null; onClose: 
           <Text style={s.closeText}>{t('common.close')}</Text>
         </Pressable>
       </SafeAreaView>
-    </Modal>
+    </FullModal>
   );
 }
 

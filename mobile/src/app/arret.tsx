@@ -21,7 +21,7 @@ import { colors, fonts, radius } from '../theme';
  * puis les passages par ligne et par sens, l'info trafic des lignes qui passent ici, et les sorties.
  */
 export default function Arret() {
-  const params = useLocalSearchParams<{ ref: string; area?: string; name?: string; to?: string; toName?: string }>();
+  const params = useLocalSearchParams<{ ref: string; area?: string; name?: string; to?: string; toName?: string; place?: string; dist?: string; lat?: string; lon?: string }>();
   const { ref, area, name } = params;
   const { t } = useI18n();
 
@@ -92,6 +92,14 @@ export default function Arret() {
       >
         <Text style={s.h1} accessibilityRole="header">{name || t('stop.title')}</Text>
         <Text style={s.fresh}>{age === null ? t('home.refreshing') : t('stop.updated', { n: age })}</Text>
+
+        {/* Pas encore dans la station : on propose d'y aller à pied, avec le GPS piéton. */}
+        {params.place && Number(params.dist) > 80 ? (
+          <Pressable onPress={() => router.push({ pathname: '/marche', params: { to: params.place!, name: name ?? '', area: area ?? '', ...(params.lat ? { lat: params.lat, lon: params.lon! } : {}) } })}
+            style={s.walk} accessibilityRole="button">
+            <Text style={s.walkText}>🚶 {t('walk.go')} · {t('walk.minWalk', { n: Math.max(1, Math.round(Number(params.dist) / 75)) })}</Text>
+          </Pressable>
+        ) : null}
 
         {/* Tu vas où ? Le filtre qui évite de monter dans le mauvais train. */}
         {picking ? (
@@ -175,6 +183,8 @@ const s = StyleSheet.create({
   h1: { fontFamily: fonts.display, fontSize: 34, lineHeight: 37, color: colors.ink, letterSpacing: -0.8 },
   h2: { fontFamily: fonts.bold, fontSize: 18, color: colors.ink },
   fresh: { fontFamily: fonts.medium, fontSize: 14, color: colors.muted, marginTop: -6 },
+  walk: { minHeight: 50, borderRadius: radius.pill, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center' },
+  walkText: { fontFamily: fonts.black, fontSize: 16, color: colors.ink },
   whereTo: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56, borderRadius: 18, paddingHorizontal: 16, backgroundColor: colors.ink },
   whereToText: { fontFamily: fonts.display, fontSize: 19, color: colors.lime },
   search: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56, paddingHorizontal: 16, borderRadius: 18, backgroundColor: colors.soft, borderWidth: 2, borderColor: colors.violet },

@@ -1,10 +1,9 @@
 import { useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { CloseButton, FullModal } from './FullModal';
 import MapView, { Marker } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from './Text';
-import { IconButton } from './ui';
-import { IconClose } from './icons';
 import { StationSheet } from './StationSheet';
 import { mapLook, useFrozenMarkers } from './MapBits';
 import { t } from '../lib/i18n';
@@ -31,15 +30,15 @@ export function NearbyMap({ stops, me }: { stops: NearbyStop[]; me: { lon: numbe
         </Pressable>
       </View>
 
-      <Modal visible={full} animationType="slide" onRequestClose={() => setFull(false)} presentationStyle="fullScreen">
+      <FullModal visible={full} animationType="slide" onRequestClose={() => setFull(false)} presentationStyle="fullScreen">
         <View style={{ flex: 1 }}>
           <StationsMap stops={placed} me={me} onPick={setPicked} padding={{ top: 140, right: 110, bottom: 80, left: 40 }} />
           <SafeAreaView style={s.overlay} pointerEvents="box-none">
-            <IconButton label={t('map.close')} onPress={() => setFull(false)}><IconClose /></IconButton>
+            <CloseButton onPress={() => setFull(false)} />
           </SafeAreaView>
-          {full ? <StationSheet stop={picked} onClose={() => setPicked(null)} /> : null}
+          {full ? <StationSheet stop={picked} onClose={() => setPicked(null)} onLeave={() => setFull(false)} /> : null}
         </View>
-      </Modal>
+      </FullModal>
 
       {!full ? <StationSheet stop={picked} onClose={() => setPicked(null)} /> : null}
     </>

@@ -368,7 +368,7 @@ export default function Home() {
             <View key={stop.stopRef} style={{ gap: 2 }}>
               <Pressable
                 style={s.stopHead}
-                onPress={() => router.push({ pathname: '/arret', params: { ref: stop.stopRef, area: stop.areaNumber, name: stop.name } })}
+                onPress={() => router.push({ pathname: '/arret', params: { ref: stop.stopRef, area: stop.areaNumber, name: stop.name, place: stop.placeId, dist: String(stop.distance), ...(stop.lat !== undefined ? { lat: String(stop.lat), lon: String(stop.lon) } : {}) } })}
                 accessibilityRole="button"
                 accessibilityLabel={t('home.seeStop', { name: stop.name })}
               >

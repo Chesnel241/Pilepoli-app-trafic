@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { CloseButton, FullModal } from '../components/FullModal';
 import { Text } from '../components/Text';
 import * as Haptics from 'expo-haptics';
 import * as Speech from 'expo-speech';
@@ -9,24 +10,31 @@ import { Redirect, router } from 'expo-router';
 import { guideStops, hhmm, transitLegs, trip } from '../lib/trip';
 import { computeGuide } from '../lib/guide';
 import { localeTag, minutesWord } from '../lib/i18n';
-import { fetchJourneys, fetchTraffic, useOnline } from '../lib/api';
+import { fetchJourneys, fetchTraffic, fetchWalk, useOnline } from '../lib/api';
 import { LEVEL, modeKey } from '../lib/lines';
 import { cancelTrip, notifyNow, scheduleTrip } from '../lib/notify';
 import { useI18n, useSettings } from '../lib/settings';
 import type { Journey, LineTraffic } from '../lib/types';
-import { IconButton, LineBadge, PulseDot } from '../components/ui';
-import { IconClose } from '../components/icons';
+import { LineBadge, PulseDot } from '../components/ui';
 import { TrainTrack } from '../components/TrainTrack';
 import { GuideView } from '../components/GuideView';
 import { ModeAnimation } from '../components/ModeAnimation';
-import { RouteCard, whereAmI, type Fix } from '../components/RouteCard';
+import { RouteCard, whereAmI } from '../components/RouteCard';
+import { WalkNav } from '../components/WalkNav';
+import type { Here } from '../components/TrainTrack';
+import { useLiveLocation } from '../lib/location';
+import { advance, buildModel, initTrack, notBoarded, type Track } from '../lib/tracker';
+import { walkMinutes, walkPlan } from '../lib/walk';
 import { RouteMap } from '../components/RouteMap';
 import { BoardingCard } from '../components/BoardingCard';
 import { useBoarding } from '../lib/boarding';
 import { buildRoute } from '../lib/route';
 import { colors, fonts, radius } from '../theme';
 
-/** Après Go : la consigne du moment en haut, tous les arrêts en dessous. Rien à toucher. */
+/**
+ * Après Go : le guidage suit ce qui se passe VRAIMENT (GPS, montée constatée, heure réelle du train).
+ * À pied : le GPS piéton. Sur le quai : « ton train ». À bord : arrêt par arrêt. Rien n'avance tout seul.
+ */
 export default function EnRoute() {
   const { t, lang } = useI18n();
   const { settings } = useSettings();
@@ -34,13 +42,16 @@ export default function EnRoute() {
   const [j, setJ] = useState<Journey | null>(trip.current());
   const stops = useMemo(() => (j ? guideStops(j) : []), [j, lang]);
   const [tick, setTick] = useState(Date.now());
+  const loc = useLiveLocation(true);
+  const model = useMemo(() => (j ? buildModel(j) : []), [j]);
+  const [track, setTrack] = useState<Track>(() => initTrack(model, Date.now()));
+  useEffect(() => { setTrack(initTrack(model, Date.now())); }, [model]);
   const leaving = useRef(false);
   const [boarding, setBoarding] = useState(true);
   // Grand affichage pas à pas par défaut ; la liste des arrêts en un tap.
   const [view, setView] = useState<'guide' | 'list'>('guide');
   const [voiceOn, setVoiceOn] = useState(settings.voiceAuto);
   const [mapOpen, setMapOpen] = useState(false);
-  const [fix, setFix] = useState<Fix | null>(null);
   const route = useMemo(() => (j ? buildRoute(j) : null), [j]);
 
   // Recalcul : une ligne du trajet perturbée, et les autres trajets possibles.
@@ -67,39 +78,30 @@ export default function EnRoute() {
     return () => clearTimeout(id);
   }, []);
 
-  // Position GPS pendant le trajet (appli ouverte seulement, jamais en arrière-plan), pour la carte.
-  useEffect(() => {
-    let sub: Location.LocationSubscription | null = null;
-    let alive = true;
-    (async () => {
-      const perm = await Location.getForegroundPermissionsAsync();
-      if (!perm.granted || !alive) return;
-      sub = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.Balanced, distanceInterval: 15, timeInterval: 5000 },
-        (pos) => setFix({ p: [pos.coords.longitude, pos.coords.latitude], at: Date.now(), accuracy: pos.coords.accuracy ?? null }),
-      );
-      if (!alive) sub.remove();
-    })().catch(() => null);
-    return () => { alive = false; sub?.remove(); };
-  }, []);
-
   const now = tick;
-  const state = computeGuide(stops, now);
-  const previousPhase = useRef(state.phase);
-
-  // Le tronçon à prendre maintenant (avant de monter, ou pendant une correspondance) : on suit « ton train » en direct.
+  const step = model[Math.min(track.step, model.length - 1)];
+  // Le train à suivre : celui du quai où tu attends, ou celui vers lequel tu marches.
   const boardLeg = useMemo(() => {
-    if (!j) return undefined;
-    const legs = transitLegs(j);
-    const starts = stops.map((st, i) => (i === 0 || stops[i - 1].walkAfter ? i : -1)).filter((i) => i >= 0);
-    const idx = state.phase === 'before' ? 0
-      : state.phase === 'walking' ? state.signIdx
-      : state.phase === 'at' ? (state.at === 0 ? 0 : stops[state.at]?.walkAfter ? state.at + 1 : -1)
-      : -1;
-    const k = starts.indexOf(idx);
-    return k >= 0 ? legs[k] : undefined;
-  }, [j, stops, state.phase, state.at, state.signIdx]);
+    if (!step || track.sub === 'done') return undefined;
+    if (track.sub === 'wait' && step.kind === 'ride') return step.leg;
+    if (track.sub === 'walk') {
+      const nxt = model[track.step + 1];
+      return nxt?.kind === 'ride' ? nxt.leg : undefined;
+    }
+    return undefined;
+  }, [model, track.step, track.sub]);
   const live = useBoarding(boardLeg, !!boardLeg);
+  const departure = live?.mine ? Date.parse(live.mine.expectedAt ?? live.mine.aimedAt ?? '') || undefined : undefined;
+
+  // Le suivi avance à chaque seconde, mais seulement sur preuve (voir lib/tracker).
+  useEffect(() => {
+    if (!model.length) return;
+    setTrack((tr) => advance(model, tr, { now, fix: loc.fix, gps: loc.gps === 'denied' ? 'denied' : 'granted', departure: track.sub === 'wait' ? departure : undefined }));
+  }, [now, loc.fix]);
+
+  const state = computeGuide(stops, track.virtual);
+  const previousPhase = useRef(state.phase);
+  const previousStep = useRef(`${track.step}|${track.sub}`);
 
   const speak = useCallback((text: string) => {
     Speech.stop().catch(() => null);
@@ -137,15 +139,31 @@ export default function EnRoute() {
     if (!boarding && voiceOn) speak(state.big.speech);
   }, [boarding]);
 
+  // Changement d'étape réel (arrivé à la gare, monté, descendu) : vibration et voix.
+  useEffect(() => {
+    const key = `${track.step}|${track.sub}`;
+    if (previousStep.current === key) return;
+    previousStep.current = key;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => null);
+    if (voiceOn && track.sub === 'wait' && step?.kind === 'ride') speak(t('walk.arrived') + '. ' + t('g.board', { line: step.leg.lineCode }) + '.');
+  }, [track.step, track.sub]);
+
+  // Une fois la montée constatée, les rappels sont recalés sur l'heure réelle.
+  useEffect(() => {
+    if (track.sub !== 'ride' || track.boardedAt === undefined) return;
+    scheduleTrip(stops.map((st) => ({ ...st, at: st.at + track.shift })));
+  }, [track.boardedAt]);
+
   // Arrivé : l'écran Sortie s'ouvre tout seul, les rappels restants sont annulés.
   useEffect(() => {
-    if (state.phase === 'arrived' && !leaving.current) {
+    // Seule la fin réelle du suivi déclenche l'arrivée (y compris la dernière marche jusqu'à destination).
+    if (track.sub === 'done' && !leaving.current) {
       leaving.current = true;
       cancelTrip();
       const id = setTimeout(() => router.replace('/arrivee'), 1500);
       return () => clearTimeout(id);
     }
-  }, [state.phase]);
+  }, [state.phase, track.sub]);
 
   // Surveillance du trafic toutes les minutes, sur les lignes qu'il reste à prendre.
   useEffect(() => {
@@ -201,6 +219,26 @@ export default function EnRoute() {
     setTimeout(() => setBoarding(false), 2500);
   };
 
+  // À pied, sorti du chemin plus de 15 s : nouveau chemin depuis ta position (au plus toutes les 30 s).
+  const offSince = useRef<number | null>(null);
+  const lastReroute = useRef(0);
+  const onWalkStatus = async (st: import('../lib/walk').WalkStatus | null) => {
+    if (!st || st.onRoute) { offSince.current = null; return; }
+    offSince.current = offSince.current ?? Date.now();
+    const cur = model[track.step];
+    if (!loc.fix || cur?.kind !== 'walk' || Date.now() - offSince.current < 15_000 || Date.now() - lastReroute.current < 30_000) return;
+    lastReroute.current = Date.now();
+    const nxt = model[track.step + 1];
+    const target = nxt?.kind === 'ride' && nxt.leg.fromId ? nxt.leg.fromId : cur.plan ? `${cur.plan.end[0].toFixed(6)};${cur.plan.end[1].toFixed(6)}` : null;
+    if (!target) return;
+    const leg = await fetchWalk(`${loc.fix.p[0].toFixed(6)};${loc.fix.p[1].toFixed(6)}`, target);
+    const plan = leg ? walkPlan({ ...leg, to: cur.leg.to }) : null;
+    if (!plan) return;
+    cur.plan = plan; // le tronçon à pied suit maintenant le nouveau chemin
+    offSince.current = null;
+    setTrack((tr) => ({ ...tr, along: 0, alert: undefined, offSince: undefined }));
+  };
+
   const toggleVoice = () => {
     if (voiceOn) { Speech.stop().catch(() => null); setVoiceOn(false); }
     else { setVoiceOn(true); speak(state.big.speech); }
@@ -221,16 +259,36 @@ export default function EnRoute() {
   const ends = trip.endpoints();
   const toName = ends?.toName || j.legs[j.legs.length - 1]?.to || t('g.destination');
   // Le mode en cours : celui du tronçon où l'on est (marche pendant une correspondance).
-  const curMode = state.phase === 'walking' ? 'walk' : stops[Math.min(state.at, stops.length - 1)]?.mode ?? 'metro';
-  const liveFix = fix;
-  const here = route ? whereAmI(route, now, liveFix) : null;
-  const card = (
-    <RouteCard journey={j} route={route} stops={stops} now={now} fix={liveFix} mode={curMode}
-      onOpen={() => route && setMapOpen(true)} toName={toName} />
+  const curMode = track.sub === 'walk' ? 'walk' : step?.kind === 'ride' ? step.leg.mode : 'metro';
+  const liveFix = loc.fix;
+  const here = route ? whereAmI(route, track.virtual, liveFix) : null;
+  const card = (h: number) => (
+    <RouteCard journey={j} route={route} stops={stops} now={track.virtual} fix={liveFix} mode={curMode}
+      onOpen={() => route && setMapOpen(true)} toName={toName} height={h} />
   );
+  // Ce qu'on sait vraiment de ta position, pour la liste des arrêts.
+  const walkLeft = step?.kind === 'walk' ? Math.max(0, (step.plan?.length ?? step.leg.durationMin * 75) - track.along) : 0;
+  const trackHere: Here = track.sub === 'walk' ? { kind: 'walking', minutes: walkMinutes(walkLeft) }
+    : track.source === 'gps' ? { kind: 'at' } : { kind: 'estimated' };
+  const firstWalk = model[0]?.kind === 'walk' ? model[0] : undefined;
+
+  /** Bandeaux d'alerte du suivi réel : mauvais sens, mauvais train, montée supposée. */
+  const trackBanner = track.alert === 'wrongway' || track.alert === 'wrongtrain' ? (
+    <View style={[s.alert, s.alertCut]} accessibilityLiveRegion="assertive">
+      <Text style={[s.alertTitle, { color: '#FFFFFF' }]}>{t(track.alert === 'wrongway' ? 'track.wrongway' : 'track.wrongtrain')}</Text>
+      <Text style={[s.alertSub, { color: '#D7D7DE' }]}>{track.alert === 'wrongway' ? t('track.wrongwaySub', { dir: step?.kind === 'ride' ? step.leg.direction : '' }) : t('track.wrongtrainSub')}</Text>
+    </View>
+  ) : track.sub === 'ride' && track.guessed && track.boardedAt && now - track.boardedAt < 6 * 60_000 ? (
+    <View style={s.guess}>
+      <Text style={s.guessText}>{t('track.boardedGuess', { time: hhmm(new Date(track.boardedAt).toISOString()) })}</Text>
+      <Pressable onPress={() => setTrack((tr) => notBoarded(model, tr, Date.now(), live?.next ? Date.parse(live.next.at) : undefined))} hitSlop={8} accessibilityRole="button">
+        <Text style={s.guessBtn}>{t('track.notBoarded')}</Text>
+      </Pressable>
+    </View>
+  ) : null;
   return (
     <SafeAreaView style={s.screen}>
-      <Modal visible={boarding} transparent={false} animationType="fade" onRequestClose={() => setBoarding(false)}>
+      <FullModal visible={boarding} transparent={false} animationType="fade" onRequestClose={() => setBoarding(false)}>
         <Pressable style={{ flex: 1 }} onPress={() => setBoarding(false)} accessibilityRole="button" accessibilityLabel={t('guide.startA11y')}>
           <SafeAreaView style={s.boarding}>
             <View style={s.boardingTop}>
@@ -243,14 +301,14 @@ export default function EnRoute() {
             </View>
             <View style={s.boardingCopy}>
               <Text style={s.boardingTitle}>{t('guide.letsGo')}</Text>
-              <Text style={s.boardingSub}>{c.title}, {c.sub.charAt(0).toLowerCase() + c.sub.slice(1)}</Text>
+              <Text style={s.boardingSub}>{firstWalk ? t('walk.toStation', { name: firstWalk.leg.to.replace(/\s*\(.*\)$/, '') }) : `${c.title}, ${c.sub.charAt(0).toLowerCase() + c.sub.slice(1)}`}</Text>
             </View>
           </SafeAreaView>
         </Pressable>
-      </Modal>
+      </FullModal>
 
       <View style={s.top}>
-        <IconButton label={t('guide.quit')} onPress={quit}><IconClose /></IconButton>
+        <CloseButton onPress={quit} label={t('guide.quitShort')} />
         <View style={s.switch} accessibilityRole="tablist">
           {(['guide', 'list'] as const).map((v) => (
             <Pressable key={v} onPress={() => setView(v)} accessibilityRole="tab" accessibilityState={{ selected: view === v }}
@@ -312,37 +370,51 @@ export default function EnRoute() {
       ) : null}
 
       {route && mapOpen ? (
-        <RouteMap visible={mapOpen} onClose={() => setMapOpen(false)} route={route} stops={stops} here={here?.p ?? null} source={here?.source ?? 'estime'} mode={curMode} />
+        <RouteMap visible={mapOpen} onClose={() => setMapOpen(false)} route={route} stops={stops} here={here?.p ?? null} source={here?.source ?? 'estime'} mode={curMode === 'walk' ? 'walk' : curMode} />
       ) : null}
+
+      {trackBanner ? <View style={{ paddingHorizontal: 14, paddingBottom: 8 }}>{trackBanner}</View> : null}
 
       {view === 'guide' ? (
         <View style={s.guideArea}>
-          {/* Avant de monter, « ton train » compte plus que la carte ; une fois à bord, la carte revient. */}
-          {boardLeg ? <ScrollView style={{ maxHeight: '55%' }} showsVerticalScrollIndicator={false}><BoardingCard leg={boardLeg} b={live} /></ScrollView> : card}
-          <GuideView state={state} stops={stops} voiceOn={voiceOn} onVoice={toggleVoice} />
+          {track.sub === 'walk' && step?.kind === 'walk' && step.plan ? (
+            // À pied : le GPS piéton prend tout l'écran.
+            <WalkNav plan={step.plan} live={loc} trainAt={departure ?? (boardLeg ? Date.parse(boardLeg.departureAt) : undefined)} onStatus={onWalkStatus} />
+          ) : track.sub === 'walk' || track.sub === 'wait' ? (
+            // Sur le quai (ou marche sans tracé) : « ton train » d'abord.
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+              {track.sub === 'walk' && step?.kind === 'walk' ? (
+                <View style={s.walkPlain}><Text style={s.walkPlainText}>{t('walk.toStation', { name: step.leg.to })} · {t('walk.minWalk', { n: walkMinutes(walkLeft) })}</Text></View>
+              ) : null}
+              {boardLeg ? <BoardingCard leg={boardLeg} b={live} /> : null}
+              {card(150)}
+            </ScrollView>
+          ) : (
+            <>
+              {card(150)}
+              <GuideView state={state} stops={stops} voiceOn={voiceOn} onVoice={toggleVoice} />
+            </>
+          )}
         </View>
       ) : (
         <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
-          {boardLeg ? <BoardingCard leg={boardLeg} b={live} /> : null}
-          {card}
-          <View style={s.card} accessibilityLiveRegion="polite">
-            <View style={s.cardHead}>
-              <View style={s.row}>
-                <View style={[s.badge, { backgroundColor: c.badgeColor }]}><Text style={[s.badgeText, { color: c.badgeText }]}>{c.badge}</Text></View>
-                <Text style={s.kicker} numberOfLines={1}>{c.kicker}</Text>
-              </View>
-              <View style={s.row}>
-                {online ? <PulseDot color={colors.lime} /> : null}
-                <Text style={s.live}>{online ? t('guide.live') : t('guide.planned')}</Text>
-              </View>
+          {/* En-tête compact : la consigne du moment en une ligne, pour laisser la place à la carte et aux arrêts. */}
+          <View style={s.mini} accessibilityLiveRegion="polite">
+            <View style={[s.badge, { backgroundColor: track.sub === 'walk' ? colors.lime : c.badgeColor }]}>
+              <Text style={[s.badgeText, { color: track.sub === 'walk' ? colors.ink : c.badgeText }]}>{track.sub === 'walk' ? '🚶' : c.badge}</Text>
             </View>
-            <Text style={s.title}>{c.title}</Text>
-            <Text style={s.sub}>{c.sub}</Text>
-            <View style={s.bar}><View style={[s.barFill, { width: `${Math.round(c.pct * 100)}%` }]} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.miniTitle} numberOfLines={1}>{track.sub === 'walk' && step?.kind === 'walk' ? t('walk.toStation', { name: step.leg.to.replace(/\s*\(.*\)$/, '') }) : c.title}</Text>
+              <Text style={s.miniSub} numberOfLines={1}>{track.sub === 'walk' ? t('walk.minWalk', { n: walkMinutes(walkLeft) }) : c.sub}</Text>
+            </View>
+            <View style={s.row}>
+              {track.source === 'gps' ? <PulseDot color={colors.lime} /> : null}
+              <Text style={s.live}>{track.source === 'gps' ? t('track.gps') : t('track.estimated')}</Text>
+            </View>
           </View>
-
-          <TrainTrack stops={stops} state={state} now={now} />
-
+          {card(140)}
+          {track.sub === 'wait' && boardLeg ? <BoardingCard leg={boardLeg} b={live} /> : null}
+          <TrainTrack stops={stops} state={state} now={track.virtual} here={trackHere} />
         </ScrollView>
       )}
     </SafeAreaView>
@@ -369,6 +441,14 @@ const s = StyleSheet.create({
   switchTextOn: { color: '#FFFFFF' },
   arrLabel: { fontFamily: fonts.semi, fontSize: 13, color: colors.muted },
   arr: { fontFamily: fonts.display, fontSize: 24, color: colors.ink },
+  mini: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.ink, borderRadius: 20, paddingVertical: 10, paddingHorizontal: 12 },
+  miniTitle: { fontFamily: fonts.display, fontSize: 17, color: '#FFFFFF' },
+  miniSub: { fontFamily: fonts.semi, fontSize: 13, color: colors.lime },
+  walkPlain: { backgroundColor: colors.lime, borderRadius: 18, padding: 14 },
+  walkPlainText: { fontFamily: fonts.display, fontSize: 18, color: colors.ink },
+  guess: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.amberBg, borderRadius: radius.md, padding: 12 },
+  guessText: { flex: 1, fontFamily: fonts.semi, fontSize: 14, lineHeight: 19, color: colors.amberInk },
+  guessBtn: { fontFamily: fonts.black, fontSize: 14, color: colors.ink, textDecorationLine: 'underline' },
   card: { backgroundColor: colors.ink, borderRadius: 28, padding: 18, gap: 10 },
   cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },

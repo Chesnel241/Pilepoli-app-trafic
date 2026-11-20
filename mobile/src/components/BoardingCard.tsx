@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { CloseButton, FullModal } from './FullModal';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { Text } from './Text';
 import { LineBadge } from './ui';
 import { ModeAnimation } from './ModeAnimation';
+import Svg, { Circle, Path } from 'react-native-svg';
 import type { Boarding } from '../lib/boarding';
 import { hhmm } from '../lib/trip';
 import { getLang, t } from '../lib/i18n';
@@ -87,6 +89,11 @@ export function BoardingCard({ leg, b }: { leg: JourneyLeg; b: Boarding | null }
         </View>
       ) : null}
 
+      {/* Fourche : ton terminus et celui du train piège, comme un Y. Ta branche épaisse, l'autre fine et barrée. */}
+      {b?.trap && mine && norm(b.trap.destination) !== norm(mine.destination) ? (
+        <ForkY mine={short(mine.destination)} other={short(b.trap.destination)} color={leg.lineColor} />
+      ) : null}
+
       {b?.next ? <Text style={s.next}>{t('bt.next', { time: hhmm(b.next.at), name: target })}</Text> : null}
 
       <Pressable onPress={() => setShow(true)} style={s.showBtn} accessibilityRole="button">
@@ -98,11 +105,31 @@ export function BoardingCard({ leg, b }: { leg: JourneyLeg; b: Boarding | null }
   );
 }
 
+const norm = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\(.*?\)/g, '').trim();
+
+function ForkY({ mine, other, color }: { mine: string; other: string; color: string }) {
+  return (
+    <View style={s.fork} accessibilityLabel={`${mine} ✓, ${other} ✕`}>
+      <Svg width={120} height={84} viewBox="0 0 120 84">
+        <Path d="M60 84 L60 48" stroke={color} strokeWidth={8} strokeLinecap="round" />
+        <Path d="M60 48 Q60 30 26 12" stroke={colors.lime} strokeWidth={8} strokeLinecap="round" fill="none" />
+        <Path d="M60 48 Q60 30 94 12" stroke="#5C5F6A" strokeWidth={3} strokeDasharray="4 5" strokeLinecap="round" fill="none" />
+        <Circle cx={26} cy={12} r={7} fill={colors.lime} />
+        <Circle cx={94} cy={12} r={5} fill="#5C5F6A" />
+      </Svg>
+      <View style={s.forkLabels}>
+        <Text style={s.forkMine} numberOfLines={2}>✓ {mine}</Text>
+        <Text style={s.forkOther} numberOfLines={2}>✕ {other}</Text>
+      </View>
+    </View>
+  );
+}
+
 /** En très gros, à montrer à quelqu'un sur le quai (toujours en français, la langue des gens autour). */
 function ShowSomeone({ visible, onClose, leg, mission, target, bus }: { visible: boolean; onClose: () => void; leg: JourneyLeg; mission?: string; target: string; bus: boolean }) {
   const frQuestion = bus ? `Ce bus s’arrête-t-il à ${target} ?` : `Ce train s’arrête-t-il à ${target} ?`;
   return (
-    <Modal visible={visible} animationType="fade" onRequestClose={onClose}>
+    <FullModal visible={visible} animationType="fade" onRequestClose={onClose}>
       <SafeAreaView style={s.showScreen}>
         <ScrollView contentContainerStyle={s.showBody}>
           <View style={s.showIds}>
@@ -114,7 +141,7 @@ function ShowSomeone({ visible, onClose, leg, mission, target, bus }: { visible:
         </ScrollView>
         <Pressable onPress={onClose} style={s.showClose} accessibilityRole="button"><Text style={s.showCloseText}>{t('bt.showClose')}</Text></Pressable>
       </SafeAreaView>
-    </Modal>
+    </FullModal>
   );
 }
 
@@ -144,6 +171,10 @@ const s = StyleSheet.create({
   trap: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1.5, borderColor: '#5C5F6A', borderStyle: 'dashed', borderRadius: 12, padding: 10 },
   trapText: { flex: 1, fontFamily: fonts.semi, fontSize: 14, lineHeight: 19, color: '#D7D7DE' },
   trapMission: { fontFamily: fonts.black, fontSize: 13, color: '#B9BAC2', textDecorationLine: 'line-through' },
+  fork: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#1B1D22', borderRadius: 16, padding: 10 },
+  forkLabels: { flex: 1, gap: 10 },
+  forkMine: { fontFamily: fonts.display, fontSize: 18, color: colors.lime },
+  forkOther: { fontFamily: fonts.semi, fontSize: 14, color: '#8E909A', textDecorationLine: 'line-through' },
   next: { fontFamily: fonts.semi, fontSize: 14, color: '#B9BAC2' },
   showBtn: { alignSelf: 'flex-start', borderRadius: radius.pill, borderWidth: 1.5, borderColor: '#5C5F6A', paddingVertical: 8, paddingHorizontal: 14 },
   showText: { fontFamily: fonts.bold, fontSize: 14, color: '#FFFFFF' },
