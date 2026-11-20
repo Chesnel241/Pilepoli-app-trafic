@@ -70,12 +70,12 @@ export default function Home() {
       if (status !== 'granted') return setLocState('denied');
       const last = await Location.getLastKnownPositionAsync().catch(() => null);
       if (last) {
-        setFrom(`${last.coords.longitude};${last.coords.latitude}`);
+        setFrom(`${last.coords.longitude.toFixed(6)};${last.coords.latitude.toFixed(6)}`);
         setCoords({ lon: last.coords.longitude, lat: last.coords.latitude });
         setLocState('ok');
       }
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      setFrom(`${pos.coords.longitude};${pos.coords.latitude}`);
+      setFrom(`${pos.coords.longitude.toFixed(6)};${pos.coords.latitude.toFixed(6)}`);
       setCoords({ lon: pos.coords.longitude, lat: pos.coords.latitude });
       setLocState('ok');
     })().catch(() => setLocState((s) => (s === 'ok' ? s : 'denied')));

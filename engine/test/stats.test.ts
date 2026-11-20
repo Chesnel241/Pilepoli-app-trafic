@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Stats, MIN_SAMPLES, bucketOf } from '../src/store/stats.ts';
-import { RateLimiter, cleanQuery, isEndpoint, isRef } from '../src/http/guard.ts';
+import { RateLimiter, cleanQuery, isEndpoint, isRef, normEndpoint } from '../src/http/guard.ts';
 import type { RatedDeparture } from '../src/types.ts';
 
 const dep = (journeyRef: string, aimed: number, delaySec: number, now: number): RatedDeparture => {
@@ -49,6 +49,10 @@ test('garde-fous : identifiants, recherche, débit', () => {
   assert.ok(!isRef('../etc/passwd?x=1'));
   assert.ok(isEndpoint('2.35;48.88'));
   assert.ok(!isEndpoint('2.35;48.88;evil'));
+  // Coordonnées brutes d'un iPhone (13 décimales) : acceptées puis arrondies.
+  assert.ok(isEndpoint('2.4123456789012;48.7312345678901'));
+  assert.equal(normEndpoint('2.4123456789012;48.7312345678901'), '2.412346;48.731235');
+  assert.equal(normEndpoint('stop_area:IDFM:71410'), 'stop_area:IDFM:71410');
   assert.equal(cleanQuery('a'), null);
   assert.equal(cleanQuery('  gare\u0000 du nord '), 'gare  du nord');
   const rl = new RateLimiter(60, 2);

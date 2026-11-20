@@ -45,8 +45,15 @@ const REF = /^[A-Za-z0-9:_\-.]{1,96}$/;
 export const isRef = (v: string | null): v is string => !!v && REF.test(v);
 
 /** Point de départ ou d'arrivée : un identifiant Navitia, ou « lon;lat ». */
-const COORD = /^-?\d{1,3}(\.\d{1,8})?;-?\d{1,2}(\.\d{1,8})?$/;
+// Les téléphones donnent jusqu'à 15 décimales : on les accepte, puis on arrondit (6 décimales ≈ 10 cm).
+const COORD = /^(-?\d{1,3}(?:\.\d{1,15})?);(-?\d{1,2}(?:\.\d{1,15})?)$/;
 export const isEndpoint = (v: string | null): v is string => !!v && (REF.test(v) || COORD.test(v));
+
+/** Forme propre d'un point de départ ou d'arrivée : coordonnées arrondies, identifiants inchangés. */
+export function normEndpoint(v: string): string {
+  const m = COORD.exec(v);
+  return m ? `${Number(m[1]).toFixed(6)};${Number(m[2]).toFixed(6)}` : v;
+}
 
 /** Texte de recherche : longueur bornée, pas de caractères de contrôle. */
 export function cleanQuery(v: string | null): string | null {

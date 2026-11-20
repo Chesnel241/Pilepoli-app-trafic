@@ -4,7 +4,7 @@ import { rate, stillUpcoming } from './reliability/freshness.ts';
 import { detectAnomalies } from './reliability/detect.ts';
 import { History } from './store/history.ts';
 import { Stats } from './store/stats.ts';
-import { RateLimiter, TtlCache, cleanQuery, clientIp, coords, isEndpoint, isRef } from './http/guard.ts';
+import { RateLimiter, TtlCache, cleanQuery, clientIp, coords, isEndpoint, isRef, normEndpoint } from './http/guard.ts';
 import * as prim from './sources/prim.ts';
 import type { Departure, Journey, Place, StopSnapshot } from './types.ts';
 import { lineInfo, linesCount, loadLines } from './sources/lines.ts';
@@ -201,7 +201,8 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     const from = url.searchParams.get('from');
     const to = url.searchParams.get('to');
     if (!isEndpoint(from) || !isEndpoint(to)) return send(res, 400, { error: 'Paramètres from et to obligatoires' });
-    const list = await journeysCache.wrap(`${from}>${to}`, () => call(prim.journeys(from, to, API_KEY)));
+    const a = normEndpoint(from), b = normEndpoint(to);
+    const list = await journeysCache.wrap(`${a}>${b}`, () => call(prim.journeys(a, b, API_KEY)));
     return send(res, 200, { journeys: list, source: MODE });
   }
 

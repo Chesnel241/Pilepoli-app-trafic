@@ -152,7 +152,7 @@ export default function EnRoute() {
     if (!ends || !alert) return;
     setSearching(true);
     const pos = await Location.getLastKnownPositionAsync().catch(() => null);
-    const from = pos ? `${pos.coords.longitude};${pos.coords.latitude}` : ends.from;
+    const from = pos ? `${pos.coords.longitude.toFixed(6)};${pos.coords.latitude.toFixed(6)}` : ends.from;
     const r = await fetchJourneys(from, ends.to);
     // On écarte les trajets qui reprennent la ligne perturbée.
     const avoid = alert;
