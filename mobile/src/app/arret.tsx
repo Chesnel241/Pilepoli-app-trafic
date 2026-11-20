@@ -1,62 +1,83 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { Text } from '../components/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { fetchDepartures, fetchExits, fetchTraffic } from '../lib/api';
+import { Text, TextInput } from '../components/Text';
+import { IconButton, LineBadge } from '../components/ui';
+import { IconBack, IconSearch } from '../components/icons';
+import { DepartureBoard } from '../components/DepartureBoard';
+import { LineSheet, type SheetLine } from '../components/LineSheet';
+import { fetchDepartures, fetchExits, fetchTraffic, searchPlaces } from '../lib/api';
+import { cleanTitle } from '../lib/disruption';
 import { LEVEL, modeKey } from '../lib/lines';
-import type { Exit, LineTraffic, RatedDeparture } from '../lib/types';
-import { IconButton, LineBadge, StatusChip } from '../components/ui';
-import { IconBack } from '../components/icons';
-import { colors, fonts, radius } from '../theme';
-import { anomalyLabel, depLabel, predictionLabel } from '../lib/labels';
+import { anomalyLabel } from '../lib/labels';
 import { useI18n } from '../lib/settings';
-import type { Anomaly } from '../lib/types';
+import { trip } from '../lib/trip';
+import type { Anomaly, Exit, LineTraffic, Place, RatedDeparture } from '../lib/types';
+import { colors, fonts, radius } from '../theme';
 
-/** Un arrêt : ses prochains passages regroupés par ligne, l'info trafic qui le concerne, ses sorties. */
+/**
+ * Une gare : « Tu vas où ? » d'abord (pour ne montrer que les passages qui s'y arrêtent),
+ * puis les passages par ligne et par sens, l'info trafic des lignes qui passent ici, et les sorties.
+ */
 export default function Arret() {
-  const { ref, area, name } = useLocalSearchParams<{ ref: string; area?: string; name?: string }>();
+  const params = useLocalSearchParams<{ ref: string; area?: string; name?: string; to?: string; toName?: string }>();
+  const { ref, area, name } = params;
   const { t } = useI18n();
+
+  // Destination : passée par l'écran précédent, ou déduite du trajet en cours s'il part d'ici.
+  const fromTrip = useMemo(() => {
+    const leg = trip.current()?.legs.find((l) => l.mode !== 'walk' && l.fromId && area && l.fromId.endsWith(`:${area}`));
+    return leg?.toId ? { id: leg.toId, name: leg.to } : null;
+  }, [area]);
+  const [dest, setDest] = useState<{ id: string; name: string } | null>(params.to ? { id: params.to, name: params.toName ?? '' } : fromTrip);
+  const [picking, setPicking] = useState(false);
+  const [q, setQ] = useState('');
+  const [results, setResults] = useState<Place[]>([]);
+
   const [deps, setDeps] = useState<RatedDeparture[] | null>(null);
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
+  const [failure, setFailure] = useState<string | undefined>();
   const [traffic, setTraffic] = useState<LineTraffic[]>([]);
   const [exits, setExits] = useState<Exit[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [sheet, setSheet] = useState<SheetLine | null>(null);
 
   const load = useCallback(async () => {
-    const snap = await fetchDepartures(String(ref));
+    const snap = await fetchDepartures(String(ref), dest?.id);
     setDeps(snap.departures);
     setAnomalies(snap.anomalies ?? []);
+    setFailure(snap.failure);
     setFetchedAt(Date.parse(snap.fetchedAt));
-  }, [ref]);
+  }, [ref, dest?.id]);
 
   useEffect(() => {
     load();
     const id = setInterval(load, 20_000);
+    return () => clearInterval(id);
+  }, [load]);
+
+  useEffect(() => {
     fetchTraffic().then((r) => setTraffic(r.lines)).catch(() => null);
     if (area) fetchExits(String(area)).then(setExits);
     else setExits([]);
-    return () => clearInterval(id);
-  }, [load, area]);
+  }, [area]);
 
-  // Regroupe par ligne + direction, dans l'ordre du premier passage.
-  const groups = useMemo(() => {
-    const m = new Map<string, RatedDeparture[]>();
-    for (const d of deps ?? []) {
-      const k = `${d.lineCode}|${d.destination}`;
-      m.set(k, [...(m.get(k) ?? []), d]);
-    }
-    return [...m.values()].slice(0, 10);
-  }, [deps]);
+  // Recherche de la gare de destination : seulement des gares et arrêts.
+  useEffect(() => {
+    if (!picking || q.trim().length < 2) return setResults([]);
+    const id = setTimeout(async () => setResults((await searchPlaces(q)).filter((p) => p.kind === 'stop_area')), 300);
+    return () => clearTimeout(id);
+  }, [q, picking]);
 
-  // Perturbations des lignes qui passent ici.
   const alerts = useMemo(() => {
     const here = new Set((deps ?? []).map((d) => `${modeKey(d.mode ?? '', d.lineCode)}|${d.lineCode}`));
-    return traffic.filter((l) => l.level !== 'ok' && here.has(`${modeKey(l.mode, l.code)}|${l.code}`));
+    return traffic.filter((l) => l.level !== 'ok' && l.level !== 'info' && here.has(`${modeKey(l.mode, l.code)}|${l.code}`));
   }, [deps, traffic]);
 
   const age = fetchedAt ? Math.max(0, Math.round((Date.now() - fetchedAt) / 1000)) : null;
+  const shortDest = dest?.name.replace(/\s*\(.*\)$/, '') ?? '';
 
   return (
     <SafeAreaView style={s.screen}>
@@ -66,52 +87,66 @@ export default function Arret() {
       <ScrollView
         contentContainerStyle={s.content}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} tintColor={colors.violet} />}
       >
         <Text style={s.h1} accessibilityRole="header">{name || t('stop.title')}</Text>
         <Text style={s.fresh}>{age === null ? t('home.refreshing') : t('stop.updated', { n: age })}</Text>
 
+        {/* Tu vas où ? Le filtre qui évite de monter dans le mauvais train. */}
+        {picking ? (
+          <View style={{ gap: 8 }}>
+            <View style={s.search}>
+              <IconSearch />
+              <TextInput value={q} onChangeText={setQ} autoFocus placeholder={t('stop.whereTo')} placeholderTextColor={colors.muted} style={s.input} returnKeyType="search" accessibilityLabel={t('stop.whereTo')} />
+              <Pressable onPress={() => { setPicking(false); setQ(''); }} hitSlop={10} accessibilityRole="button"><Text style={s.link}>{t('home.cancel')}</Text></Pressable>
+            </View>
+            {results.length ? (
+              <View style={s.results}>
+                {results.map((p) => (
+                  <Pressable key={p.id} onPress={() => { setDest({ id: p.id, name: p.name }); setPicking(false); setQ(''); setDeps(null); }} style={s.result} accessibilityRole="button">
+                    <Text style={s.resultText}>{p.name}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : <Text style={s.hint}>{t('stop.whereToHint')}</Text>}
+          </View>
+        ) : dest ? (
+          <View style={s.destRow}>
+            <Pressable onPress={() => setPicking(true)} style={s.destChip} accessibilityRole="button">
+              <Text style={s.destText} numberOfLines={1}>{t('stop.forDest', { name: shortDest })}</Text>
+            </Pressable>
+            <Pressable onPress={() => { setDest(null); setDeps(null); }} hitSlop={10} accessibilityRole="button"><Text style={s.link}>{t('stop.clearDest')}</Text></Pressable>
+          </View>
+        ) : (
+          <Pressable onPress={() => setPicking(true)} style={s.whereTo} accessibilityRole="button">
+            <IconSearch color={colors.lime} />
+            <Text style={s.whereToText}>{t('stop.whereTo')}</Text>
+          </Pressable>
+        )}
+
         {alerts.map((l) => {
           const lv = LEVEL[l.level];
+          const mk = modeKey(l.mode, l.code);
           return (
-            <View key={l.lineId} style={[s.alert, { backgroundColor: lv.bg }]}>
-              <LineBadge code={l.code} color={l.color} textColor={l.textColor} size={30} round={modeKey(l.mode, l.code) === 'metro'} />
-              <Text style={[s.alertText, { color: lv.fg }]} numberOfLines={3}>{l.disruptions[0]?.title ?? t(`lvl.${l.level}`)}</Text>
-            </View>
+            <Pressable key={l.lineId} onPress={() => setSheet({ code: l.code, color: l.color, textColor: l.textColor, mode: mk, level: l.level, disruptions: l.disruptions })}
+              style={[s.alert, { backgroundColor: lv.bg }]} accessibilityRole="button">
+              <LineBadge code={l.code} color={l.color} textColor={l.textColor} size={30} round={mk === 'metro'} />
+              <Text style={[s.alertText, { color: lv.fg }]} numberOfLines={2}>{cleanTitle(l.disruptions.find((d) => !d.upcoming)?.title ?? t(`lvl.${l.level}`))}</Text>
+              <Text style={[s.chev, { color: lv.fg }]}>›</Text>
+            </Pressable>
           );
         })}
 
         {anomalies.map((a, i) => (
-          <View key={`${a.kind}-${i}`} style={s.anomaly}>
-            <Text style={s.anomalyText}>{anomalyLabel(a)}</Text>
-          </View>
+          <View key={`${a.kind}-${i}`} style={s.anomaly}><Text style={s.anomalyText}>{anomalyLabel(a)}</Text></View>
         ))}
 
         {deps === null ? <ActivityIndicator color={colors.violet} style={{ marginTop: 20 }} /> : null}
-        {deps && groups.length === 0 ? <Text style={s.empty}>{t('stop.none')}</Text> : null}
-
-        {groups.map((list) => {
-          const d = list[0];
-          const pred = predictionLabel(d);
-          return (
-            <View key={`${d.lineCode}|${d.destination}`} style={s.group}>
-              <LineBadge code={d.lineCode} color={d.lineColor ?? colors.violet} textColor={d.lineTextColor ?? '#FFFFFF'} round={d.mode === 'metro'} />
-              <View style={{ flex: 1, gap: 6 }}>
-                <Text style={s.dest} numberOfLines={1}>{d.destination}</Text>
-                <StatusChip reliability={d.reliability} label={depLabel(d)} />
-                {pred ? <Text style={s.pred}>{pred}</Text> : null}
-              </View>
-              <View style={s.times}>
-                {list.slice(0, 3).map((x, i) => (
-                  <Text key={x.journeyRef} style={[i === 0 ? s.timeMain : s.timeNext, x.reliability === 'supprime' && s.cancelled]}>
-                    {x.reliability === 'supprime' ? t('stop.cancelled') : x.minutes === null || x.reliability === 'pas_vu' ? '?' : x.minutes <= 0 ? t('stop.atPlatform') : `${x.minutes}`}
-                    {i === 0 && x.minutes !== null && x.minutes > 0 && x.reliability !== 'pas_vu' && x.reliability !== 'supprime' ? <Text style={s.unit}> {t('common.min')}</Text> : null}
-                  </Text>
-                ))}
-              </View>
-            </View>
-          );
-        })}
+        {deps && deps.length === 0 ? (
+          <Text style={s.empty}>{failure === 'quota' ? t('err.quota') : failure === 'unavailable' ? t('err.unavailable') : failure === 'offline' ? t('home.offline') : t('stop.none')}</Text>
+        ) : null}
+        {deps && deps.length ? <DepartureBoard departures={deps} destName={dest ? shortDest : undefined} max={14} /> : null}
 
         {exits && exits.length > 0 ? (
           <View style={{ gap: 10, marginTop: 8 }}>
@@ -128,6 +163,7 @@ export default function Arret() {
           </View>
         ) : null}
       </ScrollView>
+      <LineSheet line={sheet} onClose={() => setSheet(null)} />
     </SafeAreaView>
   );
 }
@@ -139,19 +175,24 @@ const s = StyleSheet.create({
   h1: { fontFamily: fonts.display, fontSize: 34, lineHeight: 37, color: colors.ink, letterSpacing: -0.8 },
   h2: { fontFamily: fonts.bold, fontSize: 18, color: colors.ink },
   fresh: { fontFamily: fonts.medium, fontSize: 14, color: colors.muted, marginTop: -6 },
+  whereTo: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56, borderRadius: 18, paddingHorizontal: 16, backgroundColor: colors.ink },
+  whereToText: { fontFamily: fonts.display, fontSize: 19, color: colors.lime },
+  search: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56, paddingHorizontal: 16, borderRadius: 18, backgroundColor: colors.soft, borderWidth: 2, borderColor: colors.violet },
+  input: { flex: 1, fontFamily: fonts.medium, fontSize: 18, color: colors.ink, paddingVertical: 12 },
+  link: { fontFamily: fonts.bold, fontSize: 14, color: colors.violet },
+  hint: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 20, color: colors.muted },
+  results: { borderRadius: radius.lg, backgroundColor: colors.soft, overflow: 'hidden' },
+  result: { paddingVertical: 15, paddingHorizontal: 18, borderBottomWidth: 1, borderBottomColor: colors.line },
+  resultText: { fontFamily: fonts.semi, fontSize: 17, color: colors.ink },
+  destRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  destChip: { flexShrink: 1, backgroundColor: colors.lime, borderRadius: radius.pill, paddingVertical: 10, paddingHorizontal: 16 },
+  destText: { fontFamily: fonts.black, fontSize: 16, color: colors.ink },
   alert: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: radius.md, padding: 12 },
-  alertText: { flex: 1, fontFamily: fonts.semi, fontSize: 14, lineHeight: 19 },
+  alertText: { flexShrink: 1, flexGrow: 1, fontFamily: fonts.semi, fontSize: 14, lineHeight: 19 },
+  chev: { fontFamily: fonts.bold, fontSize: 20 },
   anomaly: { backgroundColor: colors.amberBg, borderRadius: radius.md, padding: 12 },
   anomalyText: { fontFamily: fonts.semi, fontSize: 14, lineHeight: 19, color: colors.amberInk },
-  pred: { fontFamily: fonts.medium, fontSize: 12, color: colors.muted },
-  empty: { fontFamily: fonts.medium, fontSize: 16, color: colors.muted, marginTop: 12 },
-  group: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.line },
-  dest: { fontFamily: fonts.semi, fontSize: 16, color: colors.ink },
-  times: { alignItems: 'flex-end', gap: 2 },
-  timeMain: { fontFamily: fonts.display, fontSize: 26, color: colors.ink },
-  timeNext: { fontFamily: fonts.semi, fontSize: 13, color: colors.muted },
-  unit: { fontFamily: fonts.semi, fontSize: 15 },
-  cancelled: { color: colors.redInk, textDecorationLine: 'line-through', fontSize: 15 },
+  empty: { fontFamily: fonts.medium, fontSize: 16, lineHeight: 22, color: colors.muted, marginTop: 12 },
   exits: { gap: 8 },
   exit: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.soft, borderRadius: 14, padding: 12 },
   exitNum: { minWidth: 34, height: 34, borderRadius: 10, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },

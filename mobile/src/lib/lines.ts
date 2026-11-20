@@ -20,13 +20,16 @@ export const LEVEL: Record<TrafficLevel, { label: string; bg: string; fg: string
 };
 
 /** Normalise un mode (Métro, RER, Bus…) en clé de filtre. */
-export function modeKey(mode: string, code = ''): 'metro' | 'rer' | 'tram' | 'train' | 'bus' {
+export type ModeKey = 'metro' | 'rer' | 'train' | 'tram' | 'cable' | 'bus';
+
+export function modeKey(mode: string, code = ''): ModeKey {
   const m = mode.toLowerCase();
   // Mode inconnu (référentiel indisponible) : on devine prudemment d'après le code.
   if (!m) return /^[A-E]$/.test(code) ? 'rer' : /^T\d/.test(code) ? 'tram' : 'bus';
   if (m.includes('métro') || m.includes('metro')) return 'metro';
   if (m.includes('rer')) return 'rer';
   if (m.includes('tram')) return 'tram';
+  if (m.includes('cable') || m.includes('câble') || m.includes('funic') || m.includes('téléph')) return 'cable';
   if (m.includes('train') || m.includes('transilien') || m.includes('rail')) return /^[A-E]$/.test(code) ? 'rer' : 'train';
   return 'bus';
 }

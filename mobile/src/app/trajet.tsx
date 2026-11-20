@@ -50,6 +50,14 @@ export default function Trajet() {
                   <Text style={s.legMeta}>{tn('trip.stops', 'trip.stopsPlural', Math.max(leg.stops.length - 1, 1), { m: leg.durationMin })}</Text>
                 </View>
                 <Text style={s.legFromTo}>{leg.from} → {leg.to}</Text>
+                {/* Le train précis calculé pour toi : son code mission, et la certitude qu'il s'arrête à ta gare. */}
+                {/^[A-Z]{4}$/.test(leg.mission ?? '') ? (
+                  <View style={s.missionRow}>
+                    <View style={s.mission}><Text style={s.missionText}>{leg.mission}</Text></View>
+                    <Text style={s.missionHint}>{t('bt.check', { code: leg.mission! })}</Text>
+                  </View>
+                ) : null}
+                <Text style={s.serves}>✓ {t('bt.goesTo', { name: leg.to.replace(/\s*\(.*\)$/, '') })}</Text>
                 <View style={s.chips}>
                   <View style={s.chipLive}><PulseDot size={6} /><Text style={s.chipLiveText}>{hhmm(leg.departureAt)}</Text></View>
                 </View>
@@ -100,6 +108,11 @@ const s = StyleSheet.create({
   chips: { flexDirection: 'row', gap: 6 },
   chipLive: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.lime, borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10 },
   chipLiveText: { fontFamily: fonts.black, fontSize: 14, color: colors.ink },
+  missionRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  mission: { backgroundColor: colors.lime, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
+  missionText: { fontFamily: fonts.display, fontSize: 18, letterSpacing: 1, color: colors.ink },
+  missionHint: { flex: 1, fontFamily: fonts.semi, fontSize: 13, color: '#3A3D46' },
+  serves: { fontFamily: fonts.bold, fontSize: 13, color: '#1F5E14' },
   tip: { fontFamily: fonts.semi, fontSize: 13, color: '#3A3D46' },
   exitTip: { fontFamily: fonts.bold, fontSize: 13, color: colors.violet },
   exit: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },

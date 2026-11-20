@@ -34,6 +34,10 @@ export interface Departure {
   operatorStatus?: string;
   vehicleAtStop?: boolean;
   platform?: string;
+  /** Code mission affiché sur les panneaux (RER, Transilien : « KOHL », « NOVO »…). */
+  mission?: string;
+  /** « via … » quand la destination affichée le précise (bus surtout). */
+  via?: string;
 }
 
 export interface RatedDeparture extends Departure {
@@ -48,6 +52,12 @@ export interface RatedDeparture extends Departure {
   label: string;
   /** Ce que l'historique dit de cette ligne à cet arrêt, à cette heure (absent si pas assez d'observations). */
   prediction?: { typicalDelayMin: number; badDayDelayMin: number; samples: number };
+  /**
+   * Quand on demande les passages « pour » une gare : ce passage y va-t-il ?
+   * yes = confirmé (mission et heure concordent), probable = l'heure seule concorde,
+   * no = ne s'y arrête pas, unknown = on ne sait pas (on le dit).
+   */
+  serves?: 'yes' | 'probable' | 'no' | 'unknown';
 }
 
 export type Anomaly =
@@ -83,6 +93,10 @@ export interface JourneyLeg {
   to: string;
   /** Identifiant Navitia de la zone d'arrivée (stop_area:IDFM:71410), pour retrouver ses sorties. */
   toId?: string;
+  /** Identifiant Navitia de la zone de départ du tronçon, pour suivre « ton train » au quai. */
+  fromId?: string;
+  /** Code mission ou girouette du train (RER : « KOHL ») ; pour un bus, souvent le terminus affiché. */
+  mission?: string;
   departureAt: string;
   arrivalAt: string;
   durationMin: number;

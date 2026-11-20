@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect, router } from 'expo-router';
 import { guideStops, hhmm, transitLegs, trip } from '../lib/trip';
 import { computeGuide } from '../lib/guide';
-import { localeTag } from '../lib/i18n';
+import { localeTag, minutesWord } from '../lib/i18n';
 import { fetchJourneys, fetchTraffic, useOnline } from '../lib/api';
 import { LEVEL, modeKey } from '../lib/lines';
 import { cancelTrip, notifyNow, scheduleTrip } from '../lib/notify';
@@ -21,6 +21,8 @@ import { GuideView } from '../components/GuideView';
 import { ModeAnimation } from '../components/ModeAnimation';
 import { RouteCard, whereAmI, type Fix } from '../components/RouteCard';
 import { RouteMap } from '../components/RouteMap';
+import { BoardingCard } from '../components/BoardingCard';
+import { useBoarding } from '../lib/boarding';
 import { buildRoute } from '../lib/route';
 import { colors, fonts, radius } from '../theme';
 
@@ -85,6 +87,20 @@ export default function EnRoute() {
   const state = computeGuide(stops, now);
   const previousPhase = useRef(state.phase);
 
+  // Le tronçon à prendre maintenant (avant de monter, ou pendant une correspondance) : on suit « ton train » en direct.
+  const boardLeg = useMemo(() => {
+    if (!j) return undefined;
+    const legs = transitLegs(j);
+    const starts = stops.map((st, i) => (i === 0 || stops[i - 1].walkAfter ? i : -1)).filter((i) => i >= 0);
+    const idx = state.phase === 'before' ? 0
+      : state.phase === 'walking' ? state.signIdx
+      : state.phase === 'at' ? (state.at === 0 ? 0 : stops[state.at]?.walkAfter ? state.at + 1 : -1)
+      : -1;
+    const k = starts.indexOf(idx);
+    return k >= 0 ? legs[k] : undefined;
+  }, [j, stops, state.phase, state.at, state.signIdx]);
+  const live = useBoarding(boardLeg, !!boardLeg);
+
   const speak = useCallback((text: string) => {
     Speech.stop().catch(() => null);
     Speech.speak(text, { language: localeTag(lang), rate: 0.95 });
@@ -101,6 +117,20 @@ export default function EnRoute() {
       previousPhase.current = state.phase;
     }
   }, [state.phase]);
+
+  // Voix : on annonce « ton train » (code mission, quai) une fois, puis MONTE / ATTENDS quand ça change.
+  const spoken = useRef<string>('');
+  useEffect(() => {
+    if (!voiceOn || !live?.mine || !boardLeg) return;
+    const m = live.mine;
+    const code = /^[A-Z]{4}$/.test(m.mission ?? '') ? m.mission! : `${boardLeg.lineCode}, ${m.destination}`;
+    const key = `${m.journeyRef}|${live.action ?? ''}`;
+    if (spoken.current === key) return;
+    spoken.current = key;
+    if (live.action === 'board') speak(`${t('bt.board')}. ${t('bt.boardSub')}.`);
+    else if (live.action === 'wait') speak(`${t('bt.wait')}. ${t('bt.waitSub', { n: Math.max(1, m.minutes ?? 1) })}.`);
+    else speak(t('bt.speech', { code, platform: m.platform ? t('bt.platform', { p: m.platform }) : '', mins: minutesWord(Math.max(1, m.minutes ?? 1)) }));
+  }, [live?.mine?.journeyRef, live?.action, voiceOn]);
 
   // Lecture de la première consigne si la voix est automatique.
   useEffect(() => {
@@ -287,11 +317,13 @@ export default function EnRoute() {
 
       {view === 'guide' ? (
         <View style={s.guideArea}>
-          {card}
+          {/* Avant de monter, « ton train » compte plus que la carte ; une fois à bord, la carte revient. */}
+          {boardLeg ? <ScrollView style={{ maxHeight: '55%' }} showsVerticalScrollIndicator={false}><BoardingCard leg={boardLeg} b={live} /></ScrollView> : card}
           <GuideView state={state} stops={stops} voiceOn={voiceOn} onVoice={toggleVoice} />
         </View>
       ) : (
         <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+          {boardLeg ? <BoardingCard leg={boardLeg} b={live} /> : null}
           {card}
           <View style={s.card} accessibilityLiveRegion="polite">
             <View style={s.cardHead}>

@@ -50,8 +50,24 @@ export function parseStopMonitoring(json: any): Departure[] {
       operatorStatus: call.DepartureStatus ?? call.ArrivalStatus,
       vehicleAtStop: call.VehicleAtStop,
       platform: val(call.ArrivalPlatformName) ?? val(call.DeparturePlatformName),
+      ...missionAndVia(mvj, call),
     } satisfies Departure;
   });
+}
+
+/** Un code mission ressemble à 4 lettres majuscules (KOHL, NOVO, ZEUS…). */
+export const isMission = (v?: string) => !!v && /^[A-Z]{4}$/.test(v.trim());
+
+/** Code mission et « via », s'ils sont fournis par le transporteur. */
+export function missionAndVia(mvj: any, call: any): { mission?: string; via?: string } {
+  const candidates = [
+    ...(Array.isArray(mvj.JourneyNote) ? mvj.JourneyNote.map((n: any) => n?.value) : [val(mvj.JourneyNote)]),
+    val(mvj.VehicleJourneyName), val(mvj.JourneyPatternName),
+  ].filter((x): x is string => typeof x === 'string');
+  const mission = candidates.map((c) => c.trim()).find(isMission);
+  const display = val(call.DestinationDisplay) ?? '';
+  const via = /\bvia\s+(.+)$/i.exec(display)?.[1]?.trim();
+  return { ...(mission ? { mission } : {}), ...(via ? { via } : {}) };
 }
 
 export async function stopMonitoring(stopRef: string, apiKey: string): Promise<Departure[]> {
@@ -110,6 +126,8 @@ export function parseJourneys(json: any): Journey[] {
           from: s.from?.name ?? '',
           to: s.to?.name ?? '',
           toId: s.to?.stop_point?.stop_area?.id ?? (s.to?.embedded_type === 'stop_area' ? s.to?.id : undefined),
+          fromId: s.from?.stop_point?.stop_area?.id ?? (s.from?.embedded_type === 'stop_area' ? s.from?.id : undefined),
+          ...(di.headsign ? { mission: String(di.headsign) } : {}),
           departureAt: navitiaDate(s.departure_date_time),
           arrivalAt: navitiaDate(s.arrival_date_time),
           durationMin: Math.round((s.duration ?? 0) / 60),
@@ -134,6 +152,35 @@ export function parseJourneys(json: any): Journey[] {
       reliability: weakest([realtime ? 'direct' : 'theorique']),
     };
   });
+}
+
+/** Un train ou bus direct entre deux gares (sans correspondance). */
+export interface DirectRide { lineCode: string; mission?: string; direction: string; departureAt: string; arrivalAt: string }
+
+/** Prochains trajets directs d'une gare à une autre : la liste de ceux qui s'arrêtent vraiment à destination. */
+export function parseDirect(json: any): DirectRide[] {
+  const out: DirectRide[] = [];
+  for (const j of json?.journeys ?? []) {
+    const pt = (j.sections ?? []).filter((s: any) => s.type === 'public_transport');
+    if (pt.length !== 1) continue;
+    const s = pt[0], di = s.display_informations ?? {};
+    out.push({
+      lineCode: di.code ?? '',
+      ...(di.headsign ? { mission: String(di.headsign) } : {}),
+      direction: di.direction ?? '',
+      departureAt: navitiaDate(s.departure_date_time),
+      arrivalAt: navitiaDate(s.arrival_date_time),
+    });
+  }
+  return out.sort((a, b) => a.departureAt.localeCompare(b.departureAt));
+}
+
+export async function direct(from: string, to: string, apiKey: string): Promise<DirectRide[]> {
+  const json = await get('/v2/navitia/journeys', {
+    from, to, count: 8, min_nb_journeys: 6, max_nb_transfers: 0, data_freshness: 'realtime', direct_path: 'none',
+    'first_section_mode[]': 'walking', 'last_section_mode[]': 'walking', max_walking_duration_to_pt: 300,
+  }, apiKey);
+  return parseDirect(json);
 }
 
 export async function journeys(from: string, to: string, apiKey: string): Promise<Journey[]> {

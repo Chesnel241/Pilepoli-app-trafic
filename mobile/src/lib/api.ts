@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Exit, Journey, NearbyStop, Place, StopSnapshot, TrafficReport } from './types';
+import type { Exit, Journey, NearbyStop, NetworkLine, Place, StopSnapshot, TrafficReport } from './types';
 
 /**
  * Client du moteur Pilepoil. Uniquement des données réelles (PRIM, Île-de-France Mobilités).
@@ -61,9 +61,10 @@ async function get<T>(path: string): Promise<T> {
   }
 }
 
-export async function fetchDepartures(stopRef: string): Promise<StopSnapshot> {
+/** Passages d'un arrêt ; avec `to` (stop_area:IDFM:…), chaque passage dit s'il s'arrête à cette gare. */
+export async function fetchDepartures(stopRef: string, to?: string): Promise<StopSnapshot> {
   try {
-    return await get<StopSnapshot>(`/stops/${encodeURIComponent(stopRef)}/departures`);
+    return await get<StopSnapshot>(`/stops/${encodeURIComponent(stopRef)}/departures${to ? `?to=${encodeURIComponent(to)}` : ''}`);
   } catch (e) {
     return { stopRef, fetchedAt: new Date().toISOString(), departures: [], anomalies: [], source: 'offline', failure: failureOf(e) };
   }
@@ -112,3 +113,19 @@ export async function fetchExits(areaNumber: string): Promise<Exit[]> {
     return [];
   }
 }
+
+/** Lignes du réseau (métro, RER, Transilien, tram, câble), gardées en mémoire pour la session. */
+let linesMemo: NetworkLine[] | null = null;
+export async function fetchLines(): Promise<NetworkLine[]> {
+  if (linesMemo) return linesMemo;
+  try {
+    const r = await get<{ lines: NetworkLine[] }>('/lines');
+    if (r.lines.length) linesMemo = r.lines;
+    return r.lines;
+  } catch {
+    return [];
+  }
+}
+
+/** stop_area:IDFM:71410 → STIF:StopArea:SP:71410: (référence des prochains passages). */
+export const stopRefOf = (placeId: string) => `STIF:StopArea:SP:${placeId.split(':').pop()}:`;

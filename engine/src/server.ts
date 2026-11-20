@@ -2,12 +2,13 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { timingSafeEqual } from 'node:crypto';
 import { rate, stillUpcoming } from './reliability/freshness.ts';
 import { detectAnomalies } from './reliability/detect.ts';
+import { annotateServes } from './reliability/serves.ts';
 import { History } from './store/history.ts';
 import { Stats } from './store/stats.ts';
 import { RateLimiter, TtlCache, cleanQuery, clientIp, coords, isEndpoint, isRef, normEndpoint } from './http/guard.ts';
 import * as prim from './sources/prim.ts';
 import type { Departure, Journey, Place, StopSnapshot } from './types.ts';
-import { lineInfo, linesCount, loadLines } from './sources/lines.ts';
+import { lineInfo, lineList, linesCount, loadLines } from './sources/lines.ts';
 import { fetchTraffic, type LineTraffic } from './sources/traffic.ts';
 import { fetchExits, type Exit } from './sources/exits.ts';
 
@@ -104,6 +105,7 @@ function send(res: ServerResponse, status: number, body: unknown) {
 const limiter = new RateLimiter(RATE_PER_MIN, Math.max(20, Math.round(RATE_PER_MIN / 2)));
 const placesCache = new TtlCache<Place[]>(10 * 60_000);
 const journeysCache = new TtlCache<Journey[]>(30_000, 500);
+const directCache = new TtlCache<prim.DirectRide[]>(60_000, 2000);
 const nearbyCache = new TtlCache<Awaited<ReturnType<typeof prim.nearby>>>(5 * 60_000, 2000);
 
 function tokenOk(req: IncomingMessage): boolean {
@@ -162,6 +164,14 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   if (!tokenOk(req)) return send(res, 401, { error: 'Clé client absente ou invalide' });
   if (!limiter.allow(clientIp(req, TRUST_PROXY))) return send(res, 429, { error: 'Trop de requêtes, réessaie dans un instant' });
 
+  // GET /lines : toutes les lignes ferrées, tram et câble (pour les grilles Trafic), depuis le référentiel IDFM
+  if (url.pathname === '/lines') {
+    const list = lineList(['metro', 'rail', 'tram', 'funicular', 'cableway']).map((l) => ({
+      id: l.id, code: l.code, color: l.color, textColor: l.textColor, mode: l.mode, submode: l.submode, name: l.name,
+    }));
+    return send(res, 200, { lines: list });
+  }
+
   // GET /traffic : état de toutes les lignes et perturbations en cours
   if (url.pathname === '/traffic') return send(res, 200, await traffic());
 
@@ -193,7 +203,15 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   if (parts[0] === 'stops' && parts[2] === 'departures' && parts[1]) {
     const ref = decodeURIComponent(parts[1]);
     if (!isRef(ref)) return send(res, 400, { error: "Identifiant d'arrêt invalide" });
-    return send(res, 200, await stopSnapshot(ref));
+    const snap = await stopSnapshot(ref);
+    // ?to=stop_area:IDFM:… : chaque passage dit s'il s'arrête à cette gare.
+    const to = url.searchParams.get('to');
+    if (to && isRef(to)) {
+      const from = `stop_area:IDFM:${ref.split(':').filter(Boolean).pop()}`;
+      const rides = await directCache.wrap(`${from}>${to}`, () => call(prim.direct(from, to, API_KEY))).catch(() => [] as prim.DirectRide[]);
+      return send(res, 200, { ...snap, to, departures: annotateServes(snap.departures, rides), direct: rides.slice(0, 6) });
+    }
+    return send(res, 200, snap);
   }
 
   // GET /journeys?from=...&to=...

@@ -17,6 +17,12 @@ export interface LineInfo {
   color: string;
   textColor: string;
   mode: string;
+  /** Sous-mode IDFM (« suburbanRailway »…), pour séparer RER et Transilien. */
+  submode?: string;
+  /** Nom long (« Ligne N », « RER B »…). */
+  name?: string;
+  /** Statut dans le référentiel (« active », « prochainement active »…). */
+  status?: string;
 }
 
 let lines = new Map<string, LineInfo>();
@@ -30,6 +36,9 @@ const pick = (row: Record<string, unknown>, ...keys: string[]) => {
 };
 const hex = (v: string | undefined, fallback: string) => (v && /^[0-9a-f]{6}$/i.test(v.replace('#', '')) ? `#${v.replace('#', '').toUpperCase()}` : fallback);
 
+/** Retire les champs vides (pour garder des objets compacts). */
+const defined = <T extends object>(o: T): Partial<T> => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
+
 /** Construit la table à partir des lignes du jeu de données (noms de colonnes tolérants). */
 export function buildLines(rows: Record<string, unknown>[]): Map<string, LineInfo> {
   const map = new Map<string, LineInfo>();
@@ -42,6 +51,11 @@ export function buildLines(rows: Record<string, unknown>[]): Map<string, LineInf
       color: hex(pick(r, 'ColourWeb_hexa', 'colourweb_hexa'), '#0E0F12'),
       textColor: hex(pick(r, 'TextColourWeb_hexa', 'textcolourweb_hexa'), '#FFFFFF'),
       mode: (pick(r, 'TransportMode', 'transportmode') ?? '').toLowerCase(),
+      ...defined({
+        submode: pick(r, 'TransportSubmode', 'transportsubmode'),
+        name: pick(r, 'Name_Line', 'name_line'),
+        status: pick(r, 'Status', 'status')?.toLowerCase(),
+      }),
     });
   }
   return map;
@@ -52,6 +66,27 @@ export const lineIdOf = (lineRef: string) => lineRef.split(':').filter(Boolean).
 
 /** Nombre de lignes connues (0 si le référentiel n'a pas pu être chargé). */
 export const linesCount = () => lines.size;
+
+/** Tri naturel des codes : 1, 2, 3bis, 10… puis A, B… */
+const natural = (a: string, b: string) => a.localeCompare(b, 'fr', { numeric: true, sensitivity: 'base' });
+
+/**
+ * Lignes d'un ou plusieurs modes, pour les grilles de l'onglet Trafic (sans doublons, lignes actives).
+ * Les bus sont exclus par défaut : il y en a plus de 1 500.
+ */
+export function lineList(modes: string[]): ({ id: string } & LineInfo)[] {
+  const seen = new Set<string>();
+  const out: ({ id: string } & LineInfo)[] = [];
+  for (const [id, l] of lines) {
+    if (!modes.includes(l.mode)) continue;
+    if (l.status && !l.status.startsWith('activ')) continue;
+    const key = `${l.mode}|${l.code}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ id, ...l });
+  }
+  return out.sort((a, b) => a.mode.localeCompare(b.mode) || natural(a.code, b.code));
+}
 
 export function lineInfo(lineRef: string): LineInfo | undefined {
   return lines.get(lineIdOf(lineRef));

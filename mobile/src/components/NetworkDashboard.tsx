@@ -3,21 +3,22 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import { Text } from './Text';
 import { LineBadge } from './ui';
-import { LEVEL, modeKey } from '../lib/lines';
+import { LineSheet, type SheetLine } from './LineSheet';
+import { LEVEL, modeKey, type ModeKey } from '../lib/lines';
 import { t } from '../lib/i18n';
 import type { LineTraffic, NearbyStop, TrafficReport } from '../lib/types';
 import { colors, fonts, radius } from '../theme';
 
 const RANK = { interrompu: 0, perturbe: 1, travaux: 2, info: 3, ok: 4 } as const;
 
-interface NearLine { key: string; code: string; color: string; textColor: string; mode: string; traffic?: LineTraffic }
+interface NearLine { key: string; code: string; color: string; textColor: string; mode: ModeKey; traffic?: LineTraffic }
 
 /**
  * Le tableau de bord de l'accueil : l'état des lignes qui passent autour de toi, en un coup d'œil.
  * D'abord ce qui ne va pas, puis le reste. Une ligne perturbée se touche pour lire le message.
  */
 export function NetworkDashboard({ nearby, report }: { nearby: NearbyStop[] | null; report: TrafficReport | null }) {
-  const [open, setOpen] = useState<string | null>(null);
+  const [sheet, setSheet] = useState<SheetLine | null>(null);
 
   const lines = useMemo<NearLine[]>(() => {
     if (!nearby) return [];
@@ -42,7 +43,6 @@ export function NetworkDashboard({ nearby, report }: { nearby: NearbyStop[] | nu
     : works.length ? t('dash.works', { line: works.map(label).join(', ') })
     : known ? t('dash.allGood') : '';
   const tone = bad.length ? LEVEL.perturbe : works.length ? LEVEL.travaux : LEVEL.ok;
-  const opened = lines.find((l) => l.key === open)?.traffic;
 
   return (
     <View style={s.card} accessibilityLiveRegion="polite">
@@ -59,8 +59,8 @@ export function NetworkDashboard({ nearby, report }: { nearby: NearbyStop[] | nu
             return (
               <Pressable
                 key={l.key}
-                onPress={() => (problem ? setOpen(open === l.key ? null : l.key) : router.push('/trafic'))}
-                style={[s.chip, open === l.key && s.chipOn]}
+                onPress={() => setSheet({ code: l.code, color: l.color, textColor: l.textColor, mode: l.mode, level: l.traffic?.level ?? 'ok', disruptions: l.traffic?.disruptions ?? [] })}
+                style={[s.chip, problem && s.chipOn]}
                 accessibilityRole="button"
                 accessibilityLabel={`${t('common.line', { code: l.code })} : ${t(`lvl.${l.traffic?.level ?? 'ok'}`)}`}
               >
@@ -72,12 +72,7 @@ export function NetworkDashboard({ nearby, report }: { nearby: NearbyStop[] | nu
         </View>
       ) : null}
 
-      {opened ? (
-        <View style={[s.msg, { backgroundColor: LEVEL[opened.level].bg }]}>
-          <Text style={[s.msgTitle, { color: LEVEL[opened.level].fg }]}>{opened.disruptions[0]?.title ?? t(`lvl.${opened.level}`)}</Text>
-          {opened.disruptions[0]?.message ? <Text style={s.msgBody} numberOfLines={4}>{opened.disruptions[0].message}</Text> : null}
-        </View>
-      ) : null}
+      <LineSheet line={sheet} onClose={() => setSheet(null)} />
 
       <Pressable onPress={() => router.push('/trafic')} hitSlop={8} accessibilityRole="button" style={s.all}>
         <Text style={s.allText}>{t('dash.allNetwork')} ›</Text>
@@ -95,7 +90,7 @@ const s = StyleSheet.create({
   headline: { flex: 1, fontFamily: fonts.display, fontSize: 20, lineHeight: 24, color: colors.ink },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { padding: 4, borderRadius: 14, borderWidth: 2, borderColor: 'transparent' },
-  chipOn: { borderColor: colors.ink },
+  chipOn: { borderColor: '#D12F35' },
   status: { position: 'absolute', right: 0, top: 0, width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: colors.soft },
   msg: { borderRadius: radius.md, padding: 12, gap: 4 },
   msgTitle: { fontFamily: fonts.bold, fontSize: 15, lineHeight: 20 },
