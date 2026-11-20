@@ -1,4 +1,5 @@
 import type { GuideStop } from './trip';
+import { localExit, minutesWord, t } from './i18n';
 
 /**
  * Calcule l'état du guidage à un instant donné, sans rien demander au voyageur.
@@ -43,24 +44,28 @@ export function computeGuide(stops: GuideStop[], now: number): GuideState {
   const start = stops[0]?.at ?? now;
   const end = stops[n - 1]?.at ?? now;
   const pct = Math.min(1, Math.max(0, (now - start) / Math.max(1, end - start)));
-  const exit = stops[n - 1]?.tags.find((t) => t.startsWith('Sortie'));
+  const rawExit = stops[n - 1]?.exit;
+  const exit = rawExit ? localExit(rawExit) : undefined;
+  const exitLower = exit ? exit.charAt(0).toLowerCase() + exit.slice(1) : '';
 
   if (n === 0 || now >= end) {
+    const name = stops[n - 1]?.name ?? t('g.destination');
     return {
       phase: 'arrived', at: Math.max(0, n - 1), progress: 1, signIdx: Math.max(0, n - 1),
-      card: { badge: exit ? exit.replace('Sortie ', '') : '✓', badgeColor: '#C8FF2E', badgeText: '#0E0F12', kicker: 'Tu es arrivé', title: exit ? `Prends la ${exit.toLowerCase()}` : 'Tu es arrivé', sub: stops[n - 1]?.name ?? '', pct: 1 },
-      big: { minutes: null, minutesLabel: '', target: stops[n - 1]?.name, speech: `Tu es arrivé à ${stops[n - 1]?.name ?? 'destination'}.${exit ? ` Prends la ${exit.toLowerCase()}.` : ''}` },
+      card: { badge: exit ? exit.replace(/^\D+/, '') || '✓' : '✓', badgeColor: '#C8FF2E', badgeText: '#0E0F12', kicker: t('g.arrived'), title: exit ? t('g.takeExit', { exit: exitLower }) : t('g.arrived'), sub: stops[n - 1]?.name ?? '', pct: 1 },
+      big: { minutes: null, minutesLabel: '', target: stops[n - 1]?.name, speech: t('g.arrivedSpeech', { name }) + (exit ? t('g.exitSpeech', { exit: exitLower }) : '') },
     };
   }
 
   const first = stops[0];
   if (now < start) {
+    const m = mins(start - now);
     return {
       phase: 'before', at: 0, progress: 0, signIdx: 0,
-      card: { badge: first.lineCode, badgeColor: first.color, badgeText: '#FFFFFF', kicker: `Vers ${first.direction}`, title: `Monte dans le ${first.lineCode}`, sub: `Train dans ${mins(start - now)} min${first.tags[0] ? `, ${first.tags[0].toLowerCase()}` : ''}`, pct: 0 },
+      card: { badge: first.lineCode, badgeColor: first.color, badgeText: '#FFFFFF', kicker: t('g.towards', { dir: first.direction }), title: t('g.board', { line: first.lineCode }), sub: t('g.trainIn', { n: m }) + (first.tags[0] ? `, ${first.tags[0].charAt(0).toLowerCase()}${first.tags[0].slice(1)}` : ''), pct: 0 },
       big: {
-        minutes: mins(start - now), minutesLabel: 'avant ton train', direction: first.direction, target: first.name,
-        speech: `Va au quai de la ligne ${first.lineCode}, direction ${first.direction}. Ton train arrive dans ${mins(start - now)} minutes.`,
+        minutes: m, minutesLabel: t('g.beforeTrain'), direction: first.direction, target: first.name,
+        speech: t('g.beforeSpeech', { line: first.lineCode, dir: first.direction, mins: minutesWord(m) }),
       },
     };
   }
@@ -72,25 +77,23 @@ export function computeGuide(stops: GuideStop[], now: number): GuideState {
   const progress = Math.min(1, Math.max(0, (now - cur.at) / Math.max(1, next.at - cur.at)));
 
   if (now - cur.at < DWELL_MS) {
-    const title = cur.walkAfter ? 'Descends ici' : i === 0 ? `Monte dans le ${cur.lineCode}` : `Arrêt ${short(cur.name)}`;
-    const sub = cur.walkAfter ? `Change pour le ${next.lineCode}` : i === 0 ? 'Il est à quai' : 'Reste dans le train';
+    const title = cur.walkAfter ? t('g.getOffHere') : i === 0 ? t('g.board', { line: cur.lineCode }) : t('g.stopAt', { name: short(cur.name) });
+    const sub = cur.walkAfter ? t('g.changeFor', { line: next.lineCode }) : i === 0 ? t('g.atPlatform') : t('g.stayIn');
     return {
       phase: 'at', at: i, progress: 0, signIdx: i,
       card: { badge: cur.lineCode, badgeColor: cur.color, badgeText: '#FFFFFF', kicker: cur.name, title, sub, pct },
-      big: {
-        minutes: null, minutesLabel: 'maintenant', target: cur.name, nextStop: next?.name,
-        speech: `${title}. ${sub}.`,
-      },
+      big: { minutes: null, minutesLabel: t('g.now'), target: cur.name, nextStop: next?.name, speech: `${title}. ${sub}.` },
     };
   }
 
   if (cur.walkAfter) {
+    const m = mins(next.at - now);
     return {
       phase: 'walking', at: i, progress, signIdx: i + 1,
-      card: { badge: next.lineCode, badgeColor: next.color, badgeText: '#FFFFFF', kicker: 'Correspondance', title: `Rejoins le quai du ${next.lineCode}`, sub: `${next.tags.find((t) => t.startsWith('Quai')) ?? 'Suis les panneaux'}, train dans ${mins(next.at - now)} min`, pct },
+      card: { badge: next.lineCode, badgeColor: next.color, badgeText: '#FFFFFF', kicker: t('g.connection'), title: t('g.joinPlatform', { line: next.lineCode }), sub: t('g.walkSub', { where: next.platform ?? t('g.followSigns'), n: m }), pct },
       big: {
-        minutes: mins(next.at - now), minutesLabel: 'avant ton train', direction: next.direction, target: next.lineCode,
-        speech: `Change pour la ligne ${next.lineCode}, direction ${next.direction}. Suis les panneaux. Ton train part dans ${mins(next.at - now)} minutes.`,
+        minutes: m, minutesLabel: t('g.beforeTrain'), direction: next.direction, target: next.lineCode,
+        speech: t('g.walkSpeech', { line: next.lineCode, dir: next.direction, mins: minutesWord(m) }),
       },
     };
   }
@@ -99,21 +102,20 @@ export function computeGuide(stops: GuideStop[], now: number): GuideState {
   while (target < n - 1 && !stops[target].walkAfter) target++;
   const count = target - i;
   const isNext = target === i + 1;
+  const m = mins(stops[target].at - now);
   return {
     phase: 'moving', at: i, progress, signIdx: i + 1,
     card: {
       badge: cur.lineCode, badgeColor: cur.color, badgeText: '#FFFFFF',
-      kicker: isNext ? 'Prochain arrêt' : `Vers ${cur.direction}`,
-      title: isNext ? 'C’est le prochain !' : `Descends à ${short(stops[target].name)}`,
-      sub: isNext ? `Descends à ${short(stops[target].name)} dans ${mins(stops[target].at - now)} min` : `Dans ${mins(stops[target].at - now)} min, ${count} arrêts`,
+      kicker: isNext ? t('g.nextStop') : t('g.towards', { dir: cur.direction }),
+      title: isNext ? t('g.itsNext') : t('g.getOffAt', { name: short(stops[target].name) }),
+      sub: isNext ? t('g.getOffIn', { name: short(stops[target].name), n: m }) : t('g.inStops', { n: m, count }),
       pct,
     },
     big: {
-      minutes: mins(stops[target].at - now), minutesLabel: 'avant de descendre', stopsLeft: count,
+      minutes: m, minutesLabel: t('g.beforeGetOff'), stopsLeft: count,
       nextStop: next.name, target: stops[target].name, direction: cur.direction,
-      speech: isNext
-        ? `Prépare-toi. Tu descends au prochain arrêt, ${stops[target].name}.`
-        : `Reste dans le train. Tu descends à ${stops[target].name}, dans ${count} arrêts, environ ${mins(stops[target].at - now)} minutes.`,
+      speech: isNext ? t('g.prepareSpeech', { name: stops[target].name }) : t('g.staySpeech', { name: stops[target].name, count, mins: minutesWord(m) }),
     },
   };
 }

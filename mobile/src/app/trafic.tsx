@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '../components/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { fetchTraffic } from '../lib/api';
@@ -7,12 +8,16 @@ import { LEVEL, METRO, RER, modeKey } from '../lib/lines';
 import type { LineTraffic, TrafficReport } from '../lib/types';
 import { BottomNav, LineBadge } from '../components/ui';
 import { colors, fonts, radius } from '../theme';
+import type { Key } from '../lib/i18n';
+import { useI18n } from '../lib/settings';
+import { getLang, t as tr } from '../lib/i18n';
 
 type Filter = 'tout' | 'metro' | 'rer' | 'tram' | 'bus';
-const FILTERS: [Filter, string][] = [['tout', 'Tout'], ['metro', 'Métro'], ['rer', 'RER'], ['tram', 'Tram'], ['bus', 'Bus']];
+const FILTERS: [Filter, Key][] = [['tout', 'traffic.all'], ['metro', 'traffic.metro'], ['rer', 'traffic.rer'], ['tram', 'traffic.tram'], ['bus', 'traffic.bus']];
 
 /** L'état du réseau : d'abord ce qui ne va pas, puis la grille des grandes lignes. */
 export default function Trafic() {
+  const { t, tn } = useI18n();
   const [report, setReport] = useState<TrafficReport | null>(null);
   const [filter, setFilter] = useState<Filter>('tout');
   const [open, setOpen] = useState<string | null>(null);
@@ -46,7 +51,7 @@ export default function Trafic() {
   }, [lines]);
 
   const big = troubled.filter((l) => ['metro', 'rer'].includes(modeKey(l.mode, l.code))).length;
-  const headline = !report ? 'On regarde…' : big === 0 ? 'Ça roule.' : big === 1 ? '1 grande ligne perturbée.' : `${big} grandes lignes perturbées.`;
+  const headline = !report ? t('traffic.looking') : big === 0 ? t('traffic.allGood') : big === 1 ? t('traffic.oneBig') : t('traffic.manyBig', { n: big });
   const age = report ? Math.max(0, Math.round((Date.now() - Date.parse(report.fetchedAt)) / 1000)) : null;
 
   return (
@@ -58,28 +63,28 @@ export default function Trafic() {
       >
         <Text style={s.h1}>{headline}</Text>
         <Text style={s.fresh}>
-          {age === null ? '' : age < 60 ? `Mis à jour il y a ${age} s` : `Mis à jour il y a ${Math.round(age / 60)} min`}
-          {report?.source === 'local' || report?.source === 'mock' ? ' · données simulées' : ''}
+          {age === null ? '' : age < 60 ? t('traffic.updatedS', { n: age }) : t('traffic.updatedM', { n: Math.round(age / 60) })}
+          {report?.source === 'local' || report?.source === 'mock' ? t('traffic.simulated') : ''}
         </Text>
 
         {report?.error === 'abonnement' ? (
           <View style={s.notice}>
-            <Text style={s.noticeText}>L'info trafic n'est pas encore activée : abonne-toi à l'API « Messages Info Trafic » sur ton compte PRIM, puis relance le moteur.</Text>
+            <Text style={s.noticeText}>{t('traffic.subscription')}</Text>
           </View>
         ) : report?.error ? (
-          <View style={s.notice}><Text style={s.noticeText}>L'info trafic ne répond pas pour le moment. On réessaie toutes les minutes.</Text></View>
+          <View style={s.notice}><Text style={s.noticeText}>{report.error === 'offline' ? t('home.offline') : t('traffic.unavailable')}</Text></View>
         ) : null}
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filters}>
-          {FILTERS.map(([k, label]) => (
+          {FILTERS.map(([k, labelKey]) => (
             <Pressable key={k} onPress={() => setFilter(k)} style={[s.filter, filter === k && s.filterOn]} accessibilityRole="button" accessibilityState={{ selected: filter === k }}>
-              <Text style={[s.filterText, filter === k && s.filterTextOn]}>{label}</Text>
+              <Text style={[s.filterText, filter === k && s.filterTextOn]}>{t(labelKey)}</Text>
             </Pressable>
           ))}
         </ScrollView>
 
         {troubled.length === 0 && report ? (
-          <View style={s.allGood}><Text style={s.allGoodText}>Rien à signaler sur {filter === 'tout' ? 'le réseau' : FILTERS.find((f) => f[0] === filter)?.[1].toLowerCase()} en ce moment.</Text></View>
+          <View style={s.allGood}><Text style={s.allGoodText}>{t('traffic.nothing')}</Text></View>
         ) : null}
 
         {troubled.map((l) => {
@@ -91,7 +96,7 @@ export default function Trafic() {
               <View style={s.cardHead}>
                 <LineBadge code={l.code} color={l.color} textColor={l.textColor} size={40} round={modeKey(l.mode, l.code) === 'metro'} />
                 <View style={{ flex: 1, gap: 4 }}>
-                  <View style={[s.level, { backgroundColor: lv.bg }]}><Text style={[s.levelText, { color: lv.fg }]}>{lv.label}</Text></View>
+                  <View style={[s.level, { backgroundColor: lv.bg }]}><Text style={[s.levelText, { color: lv.fg }]}>{t(`lvl.${l.level}`)}</Text></View>
                   <Text style={s.cardTitle} numberOfLines={isOpen ? undefined : 2}>{d?.title}</Text>
                 </View>
               </View>
@@ -101,21 +106,22 @@ export default function Trafic() {
                     <View key={x.id} style={{ gap: 4 }}>
                       {l.disruptions.length > 1 ? <Text style={s.subTitle}>{x.title}</Text> : null}
                       {x.message ? <Text style={s.msg}>{x.message}</Text> : null}
-                      {x.end ? <Text style={s.until}>Jusqu’au {fmt(x.end)}</Text> : null}
+                      {x.end ? <Text style={s.until}>{t('traffic.until', { date: fmt(x.end) })}</Text> : null}
                     </View>
                   ))}
                 </View>
-              ) : l.disruptions.length > 1 ? <Text style={s.more}>+ {l.disruptions.length - 1} autre{l.disruptions.length > 2 ? 's' : ''}</Text> : null}
+              ) : l.disruptions.length > 1 ? <Text style={s.more}>{tn('traffic.more', 'traffic.morePlural', l.disruptions.length - 1)}</Text> : null}
             </Pressable>
           );
         })}
 
-        {filter === 'tout' || filter === 'metro' ? <Grid title="Métro" list={METRO} byCode={byCode} round /> : null}
-        {filter === 'tout' || filter === 'rer' ? <Grid title="RER" list={RER} byCode={byCode} /> : null}
+        {filter === 'tout' || filter === 'metro' ? <Grid title={t('traffic.metro')} list={METRO} byCode={byCode} round /> : null}
+        {filter === 'tout' || filter === 'rer' ? <Grid title={t('traffic.rer')} list={RER} byCode={byCode} /> : null}
 
+        {getLang() === 'en' && troubled.length ? <Text style={s.fresh}>{t('traffic.frenchOnly')}</Text> : null}
         <View style={s.legend}>
           {(['ok', 'travaux', 'perturbe'] as const).map((k) => (
-            <View key={k} style={s.legendItem}><View style={[s.legendDot, { backgroundColor: LEVEL[k].dot }]} /><Text style={s.legendText}>{LEVEL[k].label}</Text></View>
+            <View key={k} style={s.legendItem}><View style={[s.legendDot, { backgroundColor: LEVEL[k].dot }]} /><Text style={s.legendText}>{t(`lvl.${k}`)}</Text></View>
           ))}
         </View>
       </ScrollView>
@@ -132,10 +138,10 @@ function Grid({ title, list, byCode, round = false }: {
       <Text style={s.gridTitle}>{title}</Text>
       <View style={s.grid}>
         {list.map(([code, color, text]) => {
-          const t = byCode.get(code);
-          const lv = LEVEL[t?.level ?? 'ok'];
+          const tl = byCode.get(code);
+          const lv = LEVEL[tl?.level ?? 'ok'];
           return (
-            <View key={code} style={s.cell} accessibilityLabel={`${title} ${code} : ${lv.label}`}>
+            <View key={code} style={s.cell} accessibilityLabel={`${title} ${code} : ${tr(`lvl.${tl?.level ?? 'ok'}`)}`}>
               <LineBadge code={code} color={color} textColor={text} size={40} round={round} />
               <View style={[s.cellDot, { backgroundColor: lv.dot }]} />
             </View>
@@ -148,7 +154,7 @@ function Grid({ title, list, byCode, round = false }: {
 
 const fmt = (iso: string) => {
   const d = new Date(iso);
-  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) + ` à ${String(d.getHours()).padStart(2, '0')}h${String(d.getMinutes()).padStart(2, '0')}`;
+  return d.toLocaleDateString(getLang() === 'en' ? 'en-GB' : 'fr-FR', { day: 'numeric', month: 'long' }) + `${getLang() === 'en' ? ',' : ' à'} ${String(d.getHours()).padStart(2, '0')}${getLang() === 'en' ? ':' : 'h'}${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
 const s = StyleSheet.create({

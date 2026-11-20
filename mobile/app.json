@@ -7,9 +7,15 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
+      "bundleIdentifier": "fr.pilepoil.app",
+      "buildNumber": "1",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Pile utilise ta position pour remplir ton point de départ et te guider pendant le trajet."
+        "NSLocationWhenInUseUsageDescription": "Pilepoil utilise ta position pour trouver les arrêts proches, remplir ton point de départ et te guider pendant le trajet.",
+        "CFBundleAllowMixedLocalizations": true
       }
     },
     "android": {
@@ -19,7 +25,19 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "fr.pilepoil.app",
+      "versionCode": 1,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "POST_NOTIFICATIONS",
+        "VIBRATE"
+      ],
+      "blockedPermissions": [
+        "ACCESS_BACKGROUND_LOCATION",
+        "RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -34,8 +52,28 @@
           "imageWidth": 220,
           "backgroundColor": "#5B3DF5"
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Pilepoil utilise ta position pour trouver les arrêts proches, remplir ton point de départ et te guider pendant le trajet.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#5B3DF5"
+        }
       ]
     ],
-    "scheme": "pilepoil"
+    "scheme": "pilepoil",
+    "description": "Itinéraires en Île-de-France, guidage arrêt par arrêt, et l'honnêteté sur la fraîcheur des horaires.",
+    "locales": {
+      "fr": "./locales/fr.json",
+      "en": "./locales/en.json"
+    },
+    "extra": {}
   }
 }

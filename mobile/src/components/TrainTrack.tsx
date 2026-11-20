@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { Text } from './Text';
 import type { GuideStop } from '../lib/trip';
 import type { GuideState } from '../lib/guide';
 import { hhmm } from '../lib/trip';
 import { colors, fonts } from '../theme';
+import { isExitTip, t } from '../lib/i18n';
 
 /**
  * Le fil du trajet, discret : les arrêts passés sont barrés,
@@ -14,7 +16,7 @@ export function TrainTrack({ stops, state, now }: { stops: GuideStop[]; state: G
   const nextIdx = state.phase === 'arrived' ? -1 : moving ? state.at + 1 : state.at;
 
   return (
-    <View style={s.track} accessibilityLabel="Progression du trajet">
+    <View style={s.track} accessibilityLabel={t('guide.progress')}>
       {stops.map((stop, i) => {
         const passed = state.phase === 'arrived' ? i < stops.length - 1 : i < state.at || (i === state.at && moving);
         const isNext = i === nextIdx;
@@ -84,13 +86,13 @@ function NextStop({ stop, mins, current }: { stop: GuideStop; mins: number; curr
     <Animated.View style={[s.next, { transform: [{ scale }] }]}>
       <View style={s.nextHead}>
         <Text style={s.nextName} numberOfLines={2}>{stop.name}</Text>
-        <Text style={s.nextEta}>{current ? 'Tu y es' : mins <= 0 ? 'maintenant' : `${mins} min`}</Text>
+        <Text style={s.nextEta}>{current ? t('guide.youAreThere') : mins <= 0 ? t('guide.nowShort') : `${mins} ${t('common.min')}`}</Text>
       </View>
       {stop.tags.length ? (
         <View style={s.tags}>
           {stop.tags.map((tag) => (
-            <View key={tag} style={[s.tag, tag.startsWith('Sortie') && s.exitTag]}>
-              <Text style={[s.tagText, tag.startsWith('Sortie') && s.exitTagText]}>{tag}</Text>
+            <View key={tag} style={[s.tag, isExitTip(tag) && s.exitTag]}>
+              <Text style={[s.tagText, isExitTip(tag) && s.exitTagText]}>{tag}</Text>
             </View>
           ))}
         </View>

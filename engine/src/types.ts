@@ -46,6 +46,8 @@ export interface RatedDeparture extends Departure {
   range: { min: number; max: number } | null;
   /** Texte court prêt à afficher (« En direct », « Pas vu depuis 4 min »...). */
   label: string;
+  /** Ce que l'historique dit de cette ligne à cet arrêt, à cette heure (absent si pas assez d'observations). */
+  prediction?: { typicalDelayMin: number; badDayDelayMin: number; samples: number };
 }
 
 export type Anomaly =

@@ -1,20 +1,51 @@
+import { useEffect, useState } from 'react';
 import { localDepartures, localJourneys, localTraffic } from './mock';
 import type { Exit, Journey, NearbyStop, Place, StopSnapshot, TrafficReport } from './types';
 
 /**
  * Client du moteur Pilepoil.
- * Si le moteur est injoignable, on bascule sur des données locales simulées,
- * et l'interface l'indique (source = 'local') : on ne cache jamais d'où vient l'info.
+ * En développement (ou démo), si le moteur est injoignable, on bascule sur des données simulées,
+ * et l'interface l'indique (source = 'local'). En production, jamais de fausses données :
+ * on dit simplement qu'on est hors connexion. On ne cache jamais d'où vient l'info.
  */
-const ENGINE = process.env.EXPO_PUBLIC_ENGINE_URL ?? 'http://localhost:8787';
+const ENGINE = (process.env.EXPO_PUBLIC_ENGINE_URL ?? 'http://localhost:8787').replace(/\/+$/, '');
+/** Clé anti-abus facultative (même valeur que ACCESS_TOKEN côté moteur). */
+const ENGINE_KEY = process.env.EXPO_PUBLIC_ENGINE_KEY ?? '';
+export const ALLOW_LOCAL = __DEV__ || process.env.EXPO_PUBLIC_DEMO === '1';
+
+/** État de la connexion au moteur, partagé par tous les écrans. */
+let online = true;
+const listeners = new Set<(v: boolean) => void>();
+function setOnline(v: boolean) {
+  if (v === online) return;
+  online = v;
+  listeners.forEach((l) => l(v));
+}
+export const isOnline = () => online;
+export function useOnline(): boolean {
+  const [v, setV] = useState(online);
+  useEffect(() => {
+    listeners.add(setV);
+    return () => { listeners.delete(setV); };
+  }, []);
+  return v;
+}
 
 async function get<T>(path: string): Promise<T> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 6000);
+  const timer = setTimeout(() => ctrl.abort(), 8000);
   try {
-    const res = await fetch(ENGINE + path, { signal: ctrl.signal });
+    const res = await fetch(ENGINE + path, {
+      signal: ctrl.signal,
+      headers: ENGINE_KEY ? { 'x-pilepoil-key': ENGINE_KEY } : undefined,
+    });
+    setOnline(true);
     if (!res.ok) throw new Error(`Moteur : ${res.status}`);
     return (await res.json()) as T;
+  } catch (e) {
+    // Une erreur HTTP (4xx/5xx) n'est pas une coupure réseau ; un abandon ou un échec de fetch, si.
+    if (!(e instanceof Error && e.message.startsWith('Moteur'))) setOnline(false);
+    throw e;
   } finally {
     clearTimeout(timer);
   }
@@ -24,7 +55,8 @@ export async function fetchDepartures(stopRef: string): Promise<StopSnapshot> {
   try {
     return await get<StopSnapshot>(`/stops/${encodeURIComponent(stopRef)}/departures`);
   } catch {
-    return localDepartures(stopRef);
+    if (ALLOW_LOCAL) return localDepartures(stopRef);
+    return { stopRef, fetchedAt: new Date().toISOString(), departures: [], anomalies: [], source: 'offline' };
   }
 }
 
@@ -32,7 +64,7 @@ export async function fetchJourneys(from: string, to: string): Promise<{ journey
   try {
     return await get(`/journeys?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
   } catch {
-    return { journeys: localJourneys(), source: 'local' };
+    return ALLOW_LOCAL ? { journeys: localJourneys(), source: 'local' } : { journeys: [], source: 'offline' };
   }
 }
 
@@ -49,7 +81,8 @@ export async function fetchTraffic(): Promise<TrafficReport> {
   try {
     return await get<TrafficReport>('/traffic');
   } catch {
-    return { lines: localTraffic(), fetchedAt: new Date().toISOString(), source: 'local' };
+    if (ALLOW_LOCAL) return { lines: localTraffic(), fetchedAt: new Date().toISOString(), source: 'local' };
+    return { lines: [], fetchedAt: new Date().toISOString(), source: 'offline', error: 'offline' };
   }
 }
 

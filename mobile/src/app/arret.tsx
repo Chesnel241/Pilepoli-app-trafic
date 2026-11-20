@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '../components/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { fetchDepartures, fetchExits, fetchTraffic } from '../lib/api';
@@ -8,11 +9,16 @@ import type { Exit, LineTraffic, RatedDeparture } from '../lib/types';
 import { IconButton, LineBadge, StatusChip } from '../components/ui';
 import { IconBack } from '../components/icons';
 import { colors, fonts, radius } from '../theme';
+import { anomalyLabel, depLabel, predictionLabel } from '../lib/labels';
+import { useI18n } from '../lib/settings';
+import type { Anomaly } from '../lib/types';
 
 /** Un arrêt : ses prochains passages regroupés par ligne, l'info trafic qui le concerne, ses sorties. */
 export default function Arret() {
   const { ref, area, name } = useLocalSearchParams<{ ref: string; area?: string; name?: string }>();
+  const { t } = useI18n();
   const [deps, setDeps] = useState<RatedDeparture[] | null>(null);
+  const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
   const [traffic, setTraffic] = useState<LineTraffic[]>([]);
   const [exits, setExits] = useState<Exit[] | null>(null);
@@ -21,6 +27,7 @@ export default function Arret() {
   const load = useCallback(async () => {
     const snap = await fetchDepartures(String(ref));
     setDeps(snap.departures);
+    setAnomalies(snap.anomalies ?? []);
     setFetchedAt(Date.parse(snap.fetchedAt));
   }, [ref]);
 
@@ -54,43 +61,51 @@ export default function Arret() {
   return (
     <SafeAreaView style={s.screen}>
       <View style={s.top}>
-        <IconButton label="Retour" onPress={() => router.back()}><IconBack /></IconButton>
+        <IconButton label={t('common.back')} onPress={() => router.back()}><IconBack /></IconButton>
       </View>
       <ScrollView
         contentContainerStyle={s.content}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} tintColor={colors.violet} />}
       >
-        <Text style={s.h1}>{name || 'Arrêt'}</Text>
-        <Text style={s.fresh}>{age === null ? 'Actualisation…' : `Passages à jour, ${age} s`}</Text>
+        <Text style={s.h1} accessibilityRole="header">{name || t('stop.title')}</Text>
+        <Text style={s.fresh}>{age === null ? t('home.refreshing') : t('stop.updated', { n: age })}</Text>
 
         {alerts.map((l) => {
           const lv = LEVEL[l.level];
           return (
             <View key={l.lineId} style={[s.alert, { backgroundColor: lv.bg }]}>
               <LineBadge code={l.code} color={l.color} textColor={l.textColor} size={30} round={modeKey(l.mode, l.code) === 'metro'} />
-              <Text style={[s.alertText, { color: lv.fg }]} numberOfLines={3}>{l.disruptions[0]?.title ?? lv.label}</Text>
+              <Text style={[s.alertText, { color: lv.fg }]} numberOfLines={3}>{l.disruptions[0]?.title ?? t(`lvl.${l.level}`)}</Text>
             </View>
           );
         })}
 
+        {anomalies.map((a, i) => (
+          <View key={`${a.kind}-${i}`} style={s.anomaly}>
+            <Text style={s.anomalyText}>{anomalyLabel(a)}</Text>
+          </View>
+        ))}
+
         {deps === null ? <ActivityIndicator color={colors.violet} style={{ marginTop: 20 }} /> : null}
-        {deps && groups.length === 0 ? <Text style={s.empty}>Aucun passage annoncé pour le moment.</Text> : null}
+        {deps && groups.length === 0 ? <Text style={s.empty}>{t('stop.none')}</Text> : null}
 
         {groups.map((list) => {
           const d = list[0];
+          const pred = predictionLabel(d);
           return (
             <View key={`${d.lineCode}|${d.destination}`} style={s.group}>
               <LineBadge code={d.lineCode} color={d.lineColor ?? colors.violet} textColor={d.lineTextColor ?? '#FFFFFF'} round={d.mode === 'metro'} />
               <View style={{ flex: 1, gap: 6 }}>
                 <Text style={s.dest} numberOfLines={1}>{d.destination}</Text>
-                <StatusChip reliability={d.reliability} label={d.label} />
+                <StatusChip reliability={d.reliability} label={depLabel(d)} />
+                {pred ? <Text style={s.pred}>{pred}</Text> : null}
               </View>
               <View style={s.times}>
                 {list.slice(0, 3).map((x, i) => (
                   <Text key={x.journeyRef} style={[i === 0 ? s.timeMain : s.timeNext, x.reliability === 'supprime' && s.cancelled]}>
-                    {x.reliability === 'supprime' ? 'supprimé' : x.minutes === null || x.reliability === 'pas_vu' ? '?' : x.minutes <= 0 ? 'à quai' : `${x.minutes}`}
-                    {i === 0 && x.minutes !== null && x.minutes > 0 && x.reliability !== 'pas_vu' && x.reliability !== 'supprime' ? <Text style={s.unit}> min</Text> : null}
+                    {x.reliability === 'supprime' ? t('stop.cancelled') : x.minutes === null || x.reliability === 'pas_vu' ? '?' : x.minutes <= 0 ? t('stop.atPlatform') : `${x.minutes}`}
+                    {i === 0 && x.minutes !== null && x.minutes > 0 && x.reliability !== 'pas_vu' && x.reliability !== 'supprime' ? <Text style={s.unit}> {t('common.min')}</Text> : null}
                   </Text>
                 ))}
               </View>
@@ -100,13 +115,13 @@ export default function Arret() {
 
         {exits && exits.length > 0 ? (
           <View style={{ gap: 10, marginTop: 8 }}>
-            <Text style={s.h2}>Sorties</Text>
+            <Text style={s.h2}>{t('stop.exits')}</Text>
             <View style={s.exits}>
               {exits.map((e) => (
                 <View key={e.id} style={s.exit}>
                   <View style={s.exitNum}><Text style={s.exitNumText}>{e.number ?? '•'}</Text></View>
                   <Text style={s.exitName} numberOfLines={2}>{e.name}</Text>
-                  {e.accessible ? <Text style={s.access} accessibilityLabel="Accessible fauteuil">♿</Text> : null}
+                  {e.accessible ? <Text style={s.access} accessibilityLabel={t('common.accessible')}>♿</Text> : null}
                 </View>
               ))}
             </View>
@@ -126,6 +141,9 @@ const s = StyleSheet.create({
   fresh: { fontFamily: fonts.medium, fontSize: 14, color: colors.muted, marginTop: -6 },
   alert: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: radius.md, padding: 12 },
   alertText: { flex: 1, fontFamily: fonts.semi, fontSize: 14, lineHeight: 19 },
+  anomaly: { backgroundColor: colors.amberBg, borderRadius: radius.md, padding: 12 },
+  anomalyText: { fontFamily: fonts.semi, fontSize: 14, lineHeight: 19, color: colors.amberInk },
+  pred: { fontFamily: fonts.medium, fontSize: 12, color: colors.muted },
   empty: { fontFamily: fonts.medium, fontSize: 16, color: colors.muted, marginTop: 12 },
   group: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.line },
   dest: { fontFamily: fonts.semi, fontSize: 16, color: colors.ink },

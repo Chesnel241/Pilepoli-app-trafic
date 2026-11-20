@@ -1,9 +1,13 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from './Text';
 import type { GuideState } from '../lib/guide';
 import type { GuideStop } from '../lib/trip';
 import { IconWalk } from './icons';
 import { colors, fonts } from '../theme';
+import { isExitTip } from '../lib/i18n';
+import { useI18n } from '../lib/settings';
+import { Text as FixedText } from 'react-native';
 
 /**
  * Le grand affichage pas à pas : une seule consigne, en très gros, lisible de loin.
@@ -22,6 +26,7 @@ const THEMES: Record<GuideState['phase'], Theme> = {
 export function GuideView({ state, stops, voiceOn, onVoice }: {
   state: GuideState; stops: GuideStop[]; voiceOn: boolean; onVoice: () => void;
 }) {
+  const { t: tr } = useI18n();
   const t = THEMES[state.phase];
   const c = state.card;
   const b = state.big;
@@ -53,23 +58,24 @@ export function GuideView({ state, stops, voiceOn, onVoice }: {
         )}
         <View style={{ flex: 1 }}>
           <Text style={[s.kicker, { color: t.sub }]} numberOfLines={1}>{c.kicker}</Text>
-          {b.direction ? <Text style={[s.direction, { color: t.fg }]} numberOfLines={2}>Direction {b.direction}</Text> : null}
+          {b.direction ? <Text style={[s.direction, { color: t.fg }]} numberOfLines={2}>{tr('guide.direction', { dir: b.direction })}</Text> : null}
         </View>
       </View>
 
       <Text style={[s.title, { color: t.fg }]} accessibilityRole="header">{c.title}</Text>
       {state.phase === 'moving' && b.stopsLeft === 1 && b.target ? (
-        <Text style={[s.targetLine, { color: t.fg }]}>Descends à {b.target}</Text>
+        <Text style={[s.targetLine, { color: t.fg }]}>{tr('guide.getOffAt', { name: b.target })}</Text>
       ) : null}
 
       <Animated.View style={[s.bigRow, { transform: [{ scale: pulse }] }]}>
         {b.minutes === null ? (
-          <Text style={[s.now, { color: t.fg }]}>Maintenant</Text>
+          <FixedText allowFontScaling={false} style={[s.now, { color: t.fg }]}>{tr('guide.now')}</FixedText>
         ) : (
           <>
-            <Text style={[s.bigNum, { color: state.phase === 'moving' ? colors.lime : t.fg }]}>{b.minutes}</Text>
+            {/* Le chiffre géant garde sa taille : il est déjà fait pour être lu de loin. */}
+            <FixedText allowFontScaling={false} style={[s.bigNum, { color: state.phase === 'moving' ? colors.lime : t.fg }]}>{b.minutes}</FixedText>
             <View style={{ paddingBottom: 18 }}>
-              <Text style={[s.bigUnit, { color: state.phase === 'moving' ? colors.lime : t.fg }]}>min</Text>
+              <Text style={[s.bigUnit, { color: state.phase === 'moving' ? colors.lime : t.fg }]}>{tr('common.min')}</Text>
               <Text style={[s.bigLabel, { color: t.sub }]}>{b.minutesLabel}</Text>
             </View>
           </>
@@ -80,17 +86,17 @@ export function GuideView({ state, stops, voiceOn, onVoice }: {
         {b.stopsLeft ? (
           <View style={[s.chip, { backgroundColor: t.chipBg }]}>
             <Text style={[s.chipBig, { color: t.chipFg }]}>{b.stopsLeft}</Text>
-            <Text style={[s.chipText, { color: t.chipFg }]}>{b.stopsLeft > 1 ? 'arrêts' : 'arrêt'}</Text>
+            <Text style={[s.chipText, { color: t.chipFg }]}>{b.stopsLeft > 1 ? tr('guide.stopsWord') : tr('guide.stop')}</Text>
           </View>
         ) : null}
         {b.nextStop && state.phase === 'moving' ? (
           <View style={[s.chip, { backgroundColor: t.chipBg, flexShrink: 1 }]}>
-            <Text style={[s.chipText, { color: t.chipFg }]} numberOfLines={1}>Prochain : {b.nextStop}</Text>
+            <Text style={[s.chipText, { color: t.chipFg }]} numberOfLines={1}>{tr('guide.next', { name: b.nextStop })}</Text>
           </View>
         ) : null}
         {tags.map((tag) => (
-          <View key={tag} style={[s.chip, tag.startsWith('Sortie') ? s.exitChip : { backgroundColor: t.chipBg }]}>
-            <Text style={[s.chipText, { color: tag.startsWith('Sortie') ? colors.lime : t.chipFg }]}>{tag}</Text>
+          <View key={tag} style={[s.chip, isExitTip(tag) ? s.exitChip : { backgroundColor: t.chipBg }]}>
+            <Text style={[s.chipText, { color: isExitTip(tag) ? colors.lime : t.chipFg }]}>{tag}</Text>
           </View>
         ))}
       </View>
@@ -104,11 +110,11 @@ export function GuideView({ state, stops, voiceOn, onVoice }: {
       <Pressable
         onPress={onVoice}
         accessibilityRole="button"
-        accessibilityLabel={voiceOn ? 'Couper la voix' : 'Écouter la consigne'}
+        accessibilityLabel={voiceOn ? tr('guide.voiceOff') : tr('guide.listen')}
         style={({ pressed }) => [s.voice, { backgroundColor: state.phase === 'moving' ? '#FFFFFF' : colors.ink, opacity: pressed ? 0.85 : 1 }]}
       >
         <Text style={[s.voiceText, { color: state.phase === 'moving' ? colors.ink : '#FFFFFF' }]}>
-          {voiceOn ? 'Voix activée · toucher pour couper' : 'Écouter la consigne'}
+          {voiceOn ? tr('guide.voiceOn') : tr('guide.listen')}
         </Text>
       </Pressable>
     </View>

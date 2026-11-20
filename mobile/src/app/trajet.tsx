@@ -1,29 +1,33 @@
 import { Redirect, router } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '../components/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { hhmm, trip } from '../lib/trip';
 import { BigButton, IconButton, LineBadge, PulseDot } from '../components/ui';
 import { IconBack, IconWalk } from '../components/icons';
 import { colors, fonts } from '../theme';
+import { isExitTip } from '../lib/i18n';
+import { useI18n } from '../lib/settings';
 
 /** Le trajet en détail : chaque étape, ses prochains départs et les conseils pratiques. Puis Go. */
 export default function Trajet() {
+  const { t, tn } = useI18n();
   const j = trip.current();
   if (!j) return <Redirect href="/" />;
-  const exit = j.legs.flatMap((l) => l.tips).find((t) => t.startsWith('Sortie'));
+  const exit = j.legs.flatMap((l) => l.tips).find(isExitTip);
 
   return (
     <SafeAreaView style={s.screen} edges={['top']}>
       <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
         <View style={s.top}>
-          <IconButton label="Retour" onPress={() => router.back()}><IconBack /></IconButton>
+          <IconButton label={t('common.back')} onPress={() => router.back()}><IconBack /></IconButton>
           {j.reliability === 'direct' ? (
-            <View style={s.reliable}><PulseDot /><Text style={s.reliableText}>Trajet fiable</Text></View>
+            <View style={s.reliable}><PulseDot /><Text style={s.reliableText}>{t('trip.reliable')}</Text></View>
           ) : null}
         </View>
 
         <View style={s.summary}>
-          <Text style={s.dur}>{j.durationMin}<Text style={s.durUnit}> min</Text></Text>
+          <Text style={s.dur}>{j.durationMin}<Text style={s.durUnit}> {t('common.min')}</Text></Text>
           <Text style={s.times}>{hhmm(j.departureAt)} → {hhmm(j.arrivalAt)}</Text>
         </View>
 
@@ -31,7 +35,7 @@ export default function Trajet() {
           leg.mode === 'walk' ? (
             <View key={i} style={s.walk}>
               <View style={s.rail}><IconWalk /></View>
-              <Text style={s.walkText}>{leg.durationMin} min à pied</Text>
+              <Text style={s.walkText}>{t('trip.walk', { n: leg.durationMin })}</Text>
               {leg.tips[0] ? <View style={s.tipChip}><Text style={s.tipChipText}>{leg.tips[0]}</Text></View> : null}
             </View>
           ) : (
@@ -42,15 +46,15 @@ export default function Trajet() {
               </View>
               <View style={s.legCard}>
                 <View style={s.legHead}>
-                  <Text style={s.legDir} numberOfLines={1}>Vers {leg.direction}</Text>
-                  <Text style={s.legMeta}>{Math.max(leg.stops.length - 1, 1)} arrêt{leg.stops.length > 2 ? 's' : ''}, {leg.durationMin} min</Text>
+                  <Text style={s.legDir} numberOfLines={1}>{t('trip.towards', { dir: leg.direction })}</Text>
+                  <Text style={s.legMeta}>{tn('trip.stops', 'trip.stopsPlural', Math.max(leg.stops.length - 1, 1), { m: leg.durationMin })}</Text>
                 </View>
                 <Text style={s.legFromTo}>{leg.from} → {leg.to}</Text>
                 <View style={s.chips}>
                   <View style={s.chipLive}><PulseDot size={6} /><Text style={s.chipLiveText}>{hhmm(leg.departureAt)}</Text></View>
                 </View>
-                {leg.tips.map((t) => (
-                  <Text key={t} style={t.startsWith('Sortie') ? s.exitTip : s.tip}>{t}</Text>
+                {leg.tips.map((tip) => (
+                  <Text key={tip} style={isExitTip(tip) ? s.exitTip : s.tip}>{tip}</Text>
                 ))}
               </View>
             </View>
@@ -59,13 +63,13 @@ export default function Trajet() {
 
         {exit ? (
           <View style={s.exit}>
-            <Text style={s.exitLabel}>À l'arrivée, prends la</Text>
+            <Text style={s.exitLabel}>{t('trip.atArrival')}</Text>
             <View style={s.exitBadge}><Text style={s.exitBadgeText}>{exit.split(',')[0].toUpperCase()}</Text></View>
           </View>
         ) : null}
       </ScrollView>
       <SafeAreaView edges={['bottom']} style={s.footer}>
-        <BigButton label="Go" onPress={() => router.push('/en-route')} />
+        <BigButton label={t('trip.go')} onPress={() => router.push('/en-route')} />
       </SafeAreaView>
     </SafeAreaView>
   );

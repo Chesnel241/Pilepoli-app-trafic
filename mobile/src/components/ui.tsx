@@ -1,8 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { router } from 'expo-router';
-import { Animated, Easing, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
+import { Text } from './Text';
+import { Text as FixedText } from 'react-native';
 import { colors, fonts, radius, reliabilityStyle, type Reliability } from '../theme';
 import { Wordmark } from './Wordmark';
+import { t } from '../lib/i18n';
+import { useI18n } from '../lib/settings';
 
 /** Point qui pulse : signale une info vue en direct. */
 export function PulseDot({ color = colors.ink, size = 8 }: { color?: string; size?: number }) {
@@ -43,10 +47,11 @@ export function LineBadge({ code, color, textColor = '#FFFFFF', size = 40, round
 }) {
   return (
     <View
-      accessibilityLabel={`Ligne ${code}`}
+      accessibilityLabel={t('common.line', { code })}
       style={{ width: size, height: size, borderRadius: round ? size / 2 : size * 0.3, backgroundColor: color, alignItems: 'center', justifyContent: 'center' }}
     >
-      <Text style={{ color: textColor, fontFamily: fonts.black, fontSize: code.length > 2 ? size * 0.36 : size * 0.46 }}>{code}</Text>
+      {/* Taille fixe : le badge est une pastille, le texte ne doit pas en déborder. */}
+      <FixedText allowFontScaling={false} style={{ color: textColor, fontFamily: fonts.black, fontSize: code.length > 2 ? size * 0.36 : size * 0.46 }}>{code}</FixedText>
     </View>
   );
 }
@@ -101,6 +106,7 @@ const styles = StyleSheet.create({
 
 /** Barre de navigation flottante, deux onglets seulement : partir, et l'état du trafic. */
 export function BottomNav({ active }: { active: 'aller' | 'trafic' }) {
+  useI18n();
   const item = (key: 'aller' | 'trafic', label: string, href: '/' | '/trafic') => {
     const on = active === key;
     return (
@@ -118,8 +124,8 @@ export function BottomNav({ active }: { active: 'aller' | 'trafic' }) {
   return (
     <View pointerEvents="box-none" style={navStyles.wrap}>
       <View style={navStyles.bar} accessibilityRole="tablist">
-        {item('aller', 'Aller', '/')}
-        {item('trafic', 'Trafic', '/trafic')}
+        {item('aller', t('nav.go'), '/')}
+        {item('trafic', t('nav.traffic'), '/trafic')}
       </View>
     </View>
   );

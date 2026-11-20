@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '../components/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { trip } from '../lib/trip';
@@ -8,14 +9,17 @@ import type { Exit } from '../lib/types';
 import { BigButton } from '../components/ui';
 import { IconArrowLeft, IconEscalator } from '../components/icons';
 import { colors, fonts } from '../theme';
+import { isExitTip } from '../lib/i18n';
+import { useI18n } from '../lib/settings';
 
 /** Arrivée : la sortie à prendre, en énorme, visible même en descendant du train. */
 export default function Arrivee() {
+  const { t } = useI18n();
   const j = trip.current();
   const lastLeg = j?.legs.filter((l) => l.mode !== 'walk').pop();
-  const exitTip = lastLeg?.tips.find((t) => t.startsWith('Sortie'));
+  const exitTip = lastLeg?.tips.find(isExitTip);
   const [exitLabel, exitPlace] = exitTip ? exitTip.split(',').map((x) => x.trim()) : [null, null];
-  const exitNum = exitLabel?.replace('Sortie', '').trim();
+  const exitNum = exitLabel?.replace(/^(Sortie|Exit)/i, '').trim();
 
   // Les vraies sorties de la gare (données IDFM). On ne prétend pas savoir laquelle est la meilleure
   // si le calcul d'itinéraire ne l'a pas dit : on les liste, simplement.
@@ -37,12 +41,12 @@ export default function Arrivee() {
   return (
     <View style={s.screen}>
       <SafeAreaView edges={['top']} style={s.hero}>
-        <View style={s.chip}><Text style={s.chipText}>Tu es à {lastLeg?.to ?? 'destination'}</Text></View>
-        <Text style={s.lead}>{exitNum ? 'En descendant, prends la' : 'Tu es arrivé'}</Text>
+        <View style={s.chip}><Text style={s.chipText}>{t('arr.youAreAt', { name: lastLeg?.to ?? t('g.destination') })}</Text></View>
+        <Text style={s.lead}>{exitNum ? t('arr.takeThe') : t('arr.arrived')}</Text>
         {exitNum ? (
           <View style={s.exitRow}>
             <Animated.View style={[s.exitBadge, { transform: [{ translateY: bob.interpolate({ inputRange: [0, 1], outputRange: [0, -5] }) }] }]}>
-              <Text style={s.exitWord}>SORTIE</Text>
+              <Text style={s.exitWord}>{t('arr.exitWord')}</Text>
               <Text style={s.exitNum}>{exitNum}</Text>
             </Animated.View>
             <View style={{ flex: 1, gap: 4 }}>
@@ -50,34 +54,34 @@ export default function Arrivee() {
             </View>
           </View>
         ) : (
-          <Text style={s.place}>Suis les panneaux Sortie.</Text>
+          <Text style={s.place}>{t('arr.followExit')}</Text>
         )}
       </SafeAreaView>
 
       <SafeAreaView edges={['bottom']} style={s.body}>
         <View style={s.step}>
           <View style={[s.stepIcon, { backgroundColor: colors.ink }]}><IconArrowLeft /></View>
-          <Text style={s.stepText}>Descends et suis le panneau {exitNum ?? 'Sortie'}</Text>
+          <Text style={s.stepText}>{t('arr.step1', { exit: exitNum ? `${t('arr.exitGeneric')} ${exitNum}` : t('arr.exitGeneric') })}</Text>
         </View>
         <View style={s.step}>
           <View style={s.stepIcon}><IconEscalator /></View>
-          <Text style={s.stepText}>Escalator, puis la sortie</Text>
+          <Text style={s.stepText}>{t('arr.step2')}</Text>
         </View>
         {exits.length > 0 ? (
           <View style={{ flex: 1, gap: 8 }}>
-            <Text style={s.h2}>{exitNum ? 'Toutes les sorties' : 'Les sorties de la gare'}</Text>
+            <Text style={s.h2}>{exitNum ? t('arr.allExits') : t('arr.stationExits')}</Text>
             <ScrollView contentContainerStyle={{ gap: 8 }} showsVerticalScrollIndicator={false}>
               {exits.map((e) => (
                 <View key={e.id} style={[s.exit, e.number && e.number === exitNum && s.exitOn]}>
                   <View style={s.exitChip}><Text style={s.exitChipText}>{e.number ?? '•'}</Text></View>
                   <Text style={s.exitName} numberOfLines={2}>{e.name}</Text>
-                  {e.accessible ? <Text accessibilityLabel="Accessible fauteuil">♿</Text> : null}
+                  {e.accessible ? <Text accessibilityLabel={t('common.accessible')}>♿</Text> : null}
                 </View>
               ))}
             </ScrollView>
           </View>
         ) : <View style={{ flex: 1 }} />}
-        <BigButton label="Terminer" tone="ink" onPress={() => router.dismissAll()} />
+        <BigButton label={t('arr.done')} tone="ink" onPress={() => { trip.clear(); router.dismissAll(); }} />
       </SafeAreaView>
     </View>
   );

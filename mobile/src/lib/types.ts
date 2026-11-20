@@ -17,13 +17,21 @@ export interface RatedDeparture {
   minutes: number | null;
   range: { min: number; max: number } | null;
   label: string;
+  /** Ce que l'historique dit de cette ligne ici, à cette heure (absent si pas assez d'observations). */
+  prediction?: { typicalDelayMin: number; badDayDelayMin: number; samples: number };
 }
+
+export type Anomaly =
+  | { kind: 'early'; journeyRef: string; lineCode: string; minutesEarly: number; at: string }
+  | { kind: 'vanished'; journeyRef: string; lineCode: string; aimedAt: string | null; at: string }
+  | { kind: 'stale_feed'; stopRef: string; ageSeconds: number; at: string };
 
 export interface StopSnapshot {
   stopRef: string;
   fetchedAt: string;
   departures: RatedDeparture[];
-  source: 'prim' | 'mock' | 'local';
+  anomalies?: Anomaly[];
+  source: 'prim' | 'mock' | 'local' | 'offline';
 }
 
 export type LegMode = 'walk' | 'metro' | 'rer' | 'train' | 'tram' | 'bus' | 'cable' | 'other';
@@ -91,6 +99,7 @@ export interface TrafficReport {
 }
 
 export interface NearbyStop {
+  anomalies?: Anomaly[];
   stopRef: string;
   placeId: string;
   areaNumber: string;

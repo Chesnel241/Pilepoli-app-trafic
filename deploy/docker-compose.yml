@@ -1,0 +1,34 @@
+# Moteur Pilepoil sur un VPS, derrière Nginx (HTTPS).
+# Lancer depuis ce dossier : docker compose up -d --build
+services:
+  engine:
+    build: ../engine
+    container_name: pilepoil-engine
+    restart: unless-stopped
+    env_file: ../engine/.env
+    environment:
+      DATA_MODE: prim
+      TRUST_PROXY: "1"
+      DATA_DIR: /data
+    # Uniquement accessible depuis la machine : c'est Nginx qui l'expose en HTTPS.
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - pilepoil-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 384m
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  pilepoil-data:

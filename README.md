@@ -62,13 +62,21 @@ La clé ne doit **jamais** être committée : `.env` est ignoré par git.
 
 Seuils de fraîcheur actuels (dans `engine/src/reliability/freshness.ts`) : En direct jusqu'à 60 s, Estimé jusqu'à 3 min, Pas vu au-delà.
 
-## Ce qui viendra ensuite (v0.2)
+## Prédictions
+
+Le moteur apprend des passages réels (`engine/src/store/stats.ts`) : pour chaque ligne, arrêt, type de jour et heure, il garde les derniers retards observés juste avant le départ. Au-delà de 8 observations, il annonce le retard habituel et celui d'un mauvais jour. L'appli l'affiche seulement quand l'heure n'est pas déjà du temps réel frais, toujours au conditionnel (« D'habitude +3 min à cette heure »). Les apprentissages sont gardés dans `data/stats.json`.
+
+## Mise en production
+
+- Moteur sur un VPS : voir `deploy/LISEZ-MOI.md` (Docker, Nginx, HTTPS, sécurité).
+- Appli sur les stores : même fichier, partie « Stores » (EAS Build).
+- Confidentialité : `PRIVACY.md` (à publier, son adresse sert de lien dans les stores).
+
+## Ce qui viendra ensuite
 
 - Détection automatique « tu es monté », « mauvais train », y compris en souterrain (capteurs du téléphone).
-- Arrêt le plus proche pour « Autour de toi » (aujourd'hui un arrêt de démo, réglable avec `EXPO_PUBLIC_DEMO_STOP`).
-- Numéros de sortie et d'accès réels à partir des données des gares.
-- Prédictions à partir de l'historique, notifications et écran verrouillé (Live Activities).
-- Mode simple et « Aide-moi » pour les proches.
+- Écran verrouillé en direct (Live Activities iOS, notification permanente Android).
+- Mode « Aide-moi » pour les proches.
 
 ## Identité visuelle
 
