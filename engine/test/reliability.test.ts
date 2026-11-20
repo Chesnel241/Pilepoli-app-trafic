@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { classify, rate, weakest } from '../src/reliability/freshness.ts';
+import { classify, rate, weakest, stillUpcoming } from '../src/reliability/freshness.ts';
+import { buildLines, lineIdOf } from '../src/sources/lines.ts';
 import { detectAnomalies } from '../src/reliability/detect.ts';
 import { parseStopMonitoring, navitiaDate } from '../src/sources/prim.ts';
 import type { Departure } from '../src/types.ts';
@@ -81,4 +82,19 @@ test('lecture d’une réponse SIRI Lite PRIM', () => {
 test('dates Navitia converties en heure de Paris', () => {
   assert.equal(navitiaDate('20261118T211500'), '2026-11-18T20:15:00.000Z'); // hiver, UTC+1
   assert.equal(navitiaDate('20260715T090000'), '2026-07-15T07:00:00.000Z'); // été, UTC+2
+});
+
+test('un passage parti depuis plus d’une minute disparaît de la liste', () => {
+  assert.equal(stillUpcoming({ ...base, expectedAt: at(-30) }, NOW), true);
+  assert.equal(stillUpcoming({ ...base, expectedAt: at(-540) }, NOW), false);
+});
+
+test('référentiel des lignes : code brut traduit en nom et couleurs', () => {
+  const map = buildLines([
+    { id_line: 'C01375', shortname_line: '5', colourweb_hexa: 'FF7E2E', textcolourweb_hexa: '000000', transportmode: 'metro' },
+    { ID_Line: 'C01743', ShortName_Line: 'B', ColourWeb_hexa: '5291CE', TextColourWeb_hexa: 'FFFFFF', TransportMode: 'rail' },
+  ]);
+  assert.equal(lineIdOf('STIF:Line::C01375:'), 'C01375');
+  assert.deepEqual(map.get('C01375'), { code: '5', color: '#FF7E2E', textColor: '#000000', mode: 'metro' });
+  assert.equal(map.get('C01743')?.code, 'B');
 });

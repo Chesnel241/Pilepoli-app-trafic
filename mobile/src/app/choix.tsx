@@ -12,7 +12,7 @@ import { colors, fonts, reliabilityStyle } from '../theme';
 const RANK = { direct: 0, estime: 1, theorique: 2, pas_vu: 3, supprime: 4 } as const;
 
 export default function Choix() {
-  const { from, to, toName } = useLocalSearchParams<{ from: string; to: string; toName: string }>();
+  const { from, to, toName, fromName } = useLocalSearchParams<{ from: string; to: string; toName: string; fromName?: string }>();
   const [list, setList] = useState<Journey[] | null>(null);
   const [source, setSource] = useState('');
 
@@ -38,7 +38,7 @@ export default function Choix() {
       <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
         <IconButton label="Retour" onPress={() => router.back()}><IconBack /></IconButton>
         <View style={{ gap: 4 }}>
-          <Text style={s.from}>Depuis ta position</Text>
+          <Text style={s.from}>Depuis {fromName || 'ta position'}</Text>
           <Text style={s.h1}>{toName ?? 'Destination'}</Text>
         </View>
 

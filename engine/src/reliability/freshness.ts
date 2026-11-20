@@ -95,3 +95,10 @@ const ORDER: Reliability[] = ['direct', 'estime', 'theorique', 'pas_vu', 'suppri
 export function weakest(list: Reliability[]): Reliability {
   return list.reduce<Reliability>((acc, r) => (ORDER.indexOf(r) > ORDER.indexOf(acc) ? r : acc), 'direct');
 }
+
+/** Un passage dont l'heure est dépassée de plus d'une minute est considéré comme parti : on ne l'affiche plus. */
+export const DEPARTED_GRACE_MS = 60_000;
+export function stillUpcoming(d: Departure, now: number = Date.now()): boolean {
+  const t = Date.parse(d.expectedAt ?? d.aimedAt ?? '');
+  return Number.isNaN(t) || t >= now - DEPARTED_GRACE_MS;
+}

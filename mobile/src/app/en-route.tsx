@@ -18,6 +18,7 @@ export default function EnRoute() {
   const [tick, setTick] = useState(Date.now());
   const leaving = useRef(false);
   const [boarding, setBoarding] = useState(true);
+  const [walkHidden, setWalkHidden] = useState(false);
   const trainX = useRef(new Animated.Value(-160)).current;
   const walkX = useRef(new Animated.Value(-8)).current;
   const walkBounce = useRef(new Animated.Value(0)).current;
@@ -67,11 +68,12 @@ export default function EnRoute() {
 
   useEffect(() => {
     if (previousPhase.current !== state.phase) {
-      Haptics.notificationAsync(
-        state.phase === 'arrived'
-          ? Haptics.NotificationFeedbackType.Success
-          : Haptics.NotificationFeedbackType.Warning,
+      // Vibration légère à chaque étape ; l'alerte est réservée aux vrais problèmes (train supprimé, mauvais train).
+      (state.phase === 'arrived'
+        ? Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+        : Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
       ).catch(() => null);
+      if (state.phase !== 'walking') setWalkHidden(false);
       previousPhase.current = state.phase;
     }
   }, [state.phase]);
@@ -96,6 +98,7 @@ export default function EnRoute() {
   return (
     <SafeAreaView style={s.screen}>
       <Modal visible={boarding} transparent={false} animationType="fade" onRequestClose={() => setBoarding(false)}>
+        <Pressable style={{ flex: 1 }} onPress={() => setBoarding(false)} accessibilityRole="button" accessibilityLabel="Commencer le guidage">
         <SafeAreaView style={s.boarding}>
           <View style={s.boardingTop}>
             <Text style={s.boardingKicker}>Début du trajet</Text>
@@ -112,19 +115,26 @@ export default function EnRoute() {
             <View style={s.trackLine} />
           </View>
           <View style={s.boardingCopy}>
-            <Text style={s.boardingTitle}>Tu es dans le train</Text>
-            <Text style={s.boardingSub}>Direction {stops[0]?.direction}</Text>
+            <Text style={s.boardingTitle}>C’est parti.</Text>
+            <Text style={s.boardingSub}>{c.title}, {c.sub.charAt(0).toLowerCase() + c.sub.slice(1)}</Text>
           </View>
         </SafeAreaView>
+        </Pressable>
       </Modal>
 
-      <Modal visible={!boarding && state.phase === 'walking'} transparent={false} animationType="fade">
+      <Modal
+        visible={!boarding && state.phase === 'walking' && !walkHidden}
+        transparent={false}
+        animationType="fade"
+        onRequestClose={() => setWalkHidden(true)}
+      >
         <SafeAreaView style={s.walkScreen}>
           <View style={s.walkHeader}>
-            <Text style={s.walkFrom}>Depuis {stops[state.at]?.name}</Text>
+            <Text style={s.walkFrom} numberOfLines={1}>Depuis {stops[state.at]?.name}</Text>
             <View style={s.walkTime}>
-              <Text style={s.walkTimeText}>dans {Math.max(1, Math.round((stops[state.at + 1].at - now) / 60_000))} min</Text>
+              <Text style={s.walkTimeText}>train dans {Math.max(1, Math.round(((stops[state.at + 1]?.at ?? now) - now) / 60_000))} min</Text>
             </View>
+            <IconButton label="Voir tous les arrêts" onPress={() => setWalkHidden(true)}><IconClose /></IconButton>
           </View>
           <View style={s.walkHero}>
             <Animated.View style={{ transform: [{ translateX: walkX }, { translateY: walkBounce }] }}>
@@ -137,7 +147,7 @@ export default function EnRoute() {
             </Animated.View>
           </View>
           <View style={s.walkBottom}>
-            <Text style={s.walkEyebrow}>À pied · 3 min</Text>
+            <Text style={s.walkEyebrow}>{stops[state.at]?.walkMin ? `À pied · ${stops[state.at].walkMin} min` : 'À pied'}</Text>
             <Text style={s.walkTitle}>Marche vers le {stops[state.at + 1]?.lineCode}</Text>
             <Text style={s.walkSub}>{stops[state.at + 1]?.tags.find((tag) => tag.startsWith('Quai')) ?? 'Suivre les panneaux'}</Text>
             <View style={s.walkProgress}><View style={[s.walkProgressFill, { width: `${Math.round(state.progress * 100)}%` }]} /></View>
@@ -194,7 +204,7 @@ const s = StyleSheet.create({
   boardingTitle: { fontFamily: fonts.display, fontSize: 42, lineHeight: 44, color: '#FFFFFF', letterSpacing: -1 },
   boardingSub: { fontFamily: fonts.semi, fontSize: 18, color: colors.violetSoft },
   walkScreen: { flex: 1, backgroundColor: colors.lime, paddingHorizontal: 22, paddingTop: 12, paddingBottom: 28 },
-  walkHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  walkHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
   walkFrom: { flex: 1, fontFamily: fonts.semi, fontSize: 15, color: colors.ink },
   walkTime: { backgroundColor: colors.ink, borderRadius: 999, paddingVertical: 7, paddingHorizontal: 12 },
   walkTimeText: { fontFamily: fonts.black, fontSize: 13, color: '#FFFFFF' },

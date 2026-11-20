@@ -1,10 +1,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { rate } from './reliability/freshness.ts';
+import { rate, stillUpcoming } from './reliability/freshness.ts';
 import { detectAnomalies } from './reliability/detect.ts';
 import { History } from './store/history.ts';
 import * as prim from './sources/prim.ts';
 import * as mock from './sources/mock.ts';
-import type { StopSnapshot } from './types.ts';
+import type { Departure, StopSnapshot } from './types.ts';
+import { lineInfo, loadLines } from './sources/lines.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const API_KEY = process.env.PRIM_API_KEY ?? '';
@@ -15,6 +16,13 @@ if (process.env.DATA_MODE === 'prim' && !API_KEY) {
 }
 
 const history = new History(new URL('../data/observations.jsonl', import.meta.url).pathname);
+loadLines(new URL('../data/lines.json', import.meta.url).pathname);
+
+/** Remplace le code technique par le vrai nom de ligne et ses couleurs. */
+function withLine(d: Departure): Departure {
+  const info = lineInfo(d.lineRef);
+  return info ? { ...d, lineCode: info.code, lineColor: info.color, lineTextColor: info.textColor, mode: info.mode } : d;
+}
 
 /** Petit cache pour respecter les quotas PRIM : un même arrêt n'est pas réinterrogé avant 20 s. */
 const cache = new Map<string, { at: number; snap: StopSnapshot }>();
@@ -27,6 +35,8 @@ async function stopSnapshot(stopRef: string): Promise<StopSnapshot> {
   const now = Date.now();
   const raw = MODE === 'prim' ? await prim.stopMonitoring(stopRef, API_KEY) : mock.mockDepartures(stopRef, now);
   const departures = raw
+    .filter((d) => stillUpcoming(d, now))
+    .map(withLine)
     .map((d) => rate(d, now))
     .sort((a, b) => (a.minutes ?? 999) - (b.minutes ?? 999));
   const snap: StopSnapshot = {

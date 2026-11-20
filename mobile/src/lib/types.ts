@@ -4,6 +4,9 @@ import type { Reliability } from '../theme';
 export interface RatedDeparture {
   journeyRef: string;
   lineCode: string;
+  lineColor?: string;
+  lineTextColor?: string;
+  mode?: string;
   destination: string;
   direction?: string;
   aimedAt: string | null;

@@ -17,6 +17,11 @@ export interface Departure {
   journeyRef: string;
   lineRef: string;
   lineCode: string;
+  /** Couleurs officielles de la ligne (référentiel IDFM), si connues. */
+  lineColor?: string;
+  lineTextColor?: string;
+  /** Mode : metro, rer, bus, tram, rail… */
+  mode?: string;
   destination: string;
   direction?: string;
   /** Horaire prévu (ISO). */

@@ -24,6 +24,11 @@ export default function Home() {
   const [departures, setDepartures] = useState<RatedDeparture[]>([]);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
   const [recent, setRecent] = useState<{ id: string; name: string }[]>([]);
+  // Départ modifiable : par défaut la position, sinon un lieu choisi.
+  const [customFrom, setCustomFrom] = useState<{ id: string; name: string } | null>(null);
+  const [editingFrom, setEditingFrom] = useState(false);
+  const [fromQ, setFromQ] = useState('');
+  const [fromResults, setFromResults] = useState<Place[]>([]);
 
   useEffect(() => {
     AsyncStorage.getItem('pilepoil_recent_destinations')
@@ -67,11 +72,27 @@ export default function Home() {
     return () => clearTimeout(id);
   }, [q]);
 
+  // Recherche du point de départ, seulement quand on le modifie.
+  useEffect(() => {
+    if (!editingFrom || fromQ.trim().length < 2) return setFromResults([]);
+    const id = setTimeout(async () => setFromResults(await searchPlaces(fromQ)), 300);
+    return () => clearTimeout(id);
+  }, [fromQ, editingFrom]);
+
+  const pickFrom = (place: { id: string; name: string } | null) => {
+    setCustomFrom(place);
+    setEditingFrom(false);
+    setFromQ('');
+  };
+
   const go = (toId: string, toName: string) => {
     const next = [{ id: toId, name: toName }, ...recent.filter((item) => item.id !== toId)].slice(0, 3);
     setRecent(next);
     AsyncStorage.setItem('pilepoil_recent_destinations', JSON.stringify(next)).catch(() => null);
-    router.push({ pathname: '/choix', params: { from: from ?? 'mock:gare-du-nord', to: toId, toName } });
+    router.push({
+      pathname: '/choix',
+      params: { from: customFrom?.id ?? from ?? 'mock:gare-du-nord', fromName: customFrom?.name ?? '', to: toId, toName },
+    });
   };
 
   const freshness = fetchedAt ? Math.max(0, Math.round((Date.now() - fetchedAt) / 1000)) : null;
@@ -84,12 +105,48 @@ export default function Home() {
         <View style={s.header}><Logo /></View>
         <Text style={s.h1}>{greeting}{'\n'}On va où ?</Text>
 
-        <View style={s.fromRow}>
-          <IconPin />
-          <Text style={s.fromText}>
-            {locState === 'ok' ? 'Départ : ta position' : locState === 'pending' ? 'On cherche ta position…' : 'Position refusée, départ de démo'}
-          </Text>
-        </View>
+        {editingFrom ? (
+          <View style={{ gap: 8 }}>
+            <View style={[s.search, s.fromSearch]}>
+              <IconPin />
+              <TextInput
+                value={fromQ}
+                onChangeText={setFromQ}
+                placeholder="D’où tu pars ?"
+                placeholderTextColor={colors.muted}
+                style={s.input}
+                autoFocus
+                returnKeyType="done"
+                accessibilityLabel="Point de départ"
+              />
+              <Pressable onPress={() => setEditingFrom(false)} hitSlop={10} accessibilityRole="button">
+                <Text style={s.fromEdit}>Annuler</Text>
+              </Pressable>
+            </View>
+            <View style={s.results}>
+              {locState === 'ok' ? (
+                <Pressable onPress={() => pickFrom(null)} style={s.result} accessibilityRole="button">
+                  <Text style={[s.resultText, { color: colors.violet }]}>Ma position actuelle</Text>
+                </Pressable>
+              ) : null}
+              {fromResults.map((p) => (
+                <Pressable key={p.id} onPress={() => pickFrom({ id: p.id, name: p.name })} style={s.result} accessibilityRole="button">
+                  <Text style={s.resultText}>{p.name}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ) : (
+          <Pressable style={s.fromRow} onPress={() => setEditingFrom(true)} accessibilityRole="button" accessibilityLabel="Modifier le point de départ">
+            <IconPin />
+            <Text style={s.fromText} numberOfLines={1}>
+              {customFrom
+                ? `Départ : ${customFrom.name}`
+                : locState === 'ok' ? 'Départ : ta position' : locState === 'pending' ? 'On cherche ta position…' : 'Choisis ton point de départ'}
+            </Text>
+            <Text style={s.fromEdit}>Modifier</Text>
+          </Pressable>
+        )}
 
         <View style={s.search}>
           <IconSearch />
@@ -146,13 +203,16 @@ export default function Home() {
         </View>
         {departures.map((d) => (
           <View key={d.journeyRef} style={s.dep}>
-            <LineBadge code={d.lineCode} color={LINE_COLORS[d.lineCode] ?? '#FF7A1A'} textColor={LINE_COLORS[d.lineCode] ? '#FFFFFF' : colors.ink} />
+            <LineBadge
+              code={d.lineCode}
+              color={d.lineColor ?? LINE_COLORS[d.lineCode] ?? '#FF7A1A'}
+              textColor={d.lineTextColor ?? (LINE_COLORS[d.lineCode] ? '#FFFFFF' : colors.ink)}
+              round={d.mode === 'metro'}
+            />
             <View style={{ flex: 1, gap: 4 }}>
               <Text style={s.depDest} numberOfLines={1}>{d.destination}</Text>
-              <StatusChip
-                reliability={d.reliability}
-                label={d.reliability === 'direct' ? 'À quai · confirmé' : d.reliability === 'estime' ? 'À l’heure · estimé' : d.reliability === 'pas_vu' ? 'Dernier signal ancien' : d.label}
-              />
+              {/* Le libellé vient du moteur : il dit l'âge de l'info, jamais plus que ce qu'on sait. */}
+              <StatusChip reliability={d.reliability} label={d.label} />
             </View>
             <Text style={[s.depMin, d.reliability === 'pas_vu' && { color: colors.redInk }]}>
               {d.minutes === null || d.reliability === 'pas_vu' ? '?' : d.minutes}
@@ -173,7 +233,9 @@ const s = StyleSheet.create({
   h2: { fontFamily: fonts.bold, fontSize: 18, color: colors.ink },
   muted: { fontFamily: fonts.medium, fontSize: 14, color: colors.muted },
   fromRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: -8 },
-  fromText: { fontFamily: fonts.semi, fontSize: 15, color: '#3A3D46' },
+  fromText: { flexShrink: 1, fontFamily: fonts.semi, fontSize: 15, color: '#3A3D46' },
+  fromEdit: { fontFamily: fonts.bold, fontSize: 14, color: colors.violet, marginLeft: 4 },
+  fromSearch: { height: 52 },
   search: { flexDirection: 'row', alignItems: 'center', gap: 12, height: 58, paddingHorizontal: 18, borderRadius: 18, backgroundColor: colors.soft, borderWidth: 1, borderColor: colors.line },
   input: { flex: 1, fontFamily: fonts.medium, fontSize: 18, color: colors.ink },
   results: { borderRadius: radius.lg, backgroundColor: colors.soft, overflow: 'hidden' },

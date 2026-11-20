@@ -32,6 +32,8 @@ export interface GuideStop {
   tags: string[];
   /** Le segment qui suit cet arrêt se fait à pied (correspondance). */
   walkAfter: boolean;
+  /** Durée de marche prévue après cet arrêt, en minutes (si correspondance). */
+  walkMin?: number;
   end: boolean;
 }
 
@@ -49,6 +51,8 @@ export function guideStops(j: Journey): GuideStop[] {
       if (last && next) tags.push(`Change pour le ${next.lineCode}`);
       const isEnd = last && li === legs.length - 1;
       if (isEnd) leg.tips.filter((t) => t.startsWith('Sortie')).forEach((t) => tags.push(t.split(',')[0]));
+      const legIdx = j.legs.indexOf(leg);
+      const walkLeg = last && next ? j.legs.slice(legIdx + 1, j.legs.indexOf(next)).find((l) => l.mode === 'walk') : undefined;
       out.push({
         name: s.name,
         at: Date.parse(s.at),
@@ -57,6 +61,7 @@ export function guideStops(j: Journey): GuideStop[] {
         direction: leg.direction,
         tags,
         walkAfter: last && !!next,
+        walkMin: walkLeg?.durationMin,
         end: isEnd,
       });
     });
