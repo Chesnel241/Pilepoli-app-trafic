@@ -1,3 +1,4 @@
+import { datasetHeaders } from './datasets.ts';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
@@ -61,7 +62,7 @@ export async function loadLines(cacheFile: string): Promise<void> {
   }
   const refresh = async () => {
     try {
-      const res = await fetch(URL_LINES, { signal: AbortSignal.timeout(30_000) });
+      const res = await fetch(URL_LINES, { headers: datasetHeaders(), signal: AbortSignal.timeout(30_000) });
       if (!res.ok) throw new Error(`référentiel des lignes : ${res.status}`);
       const rows = (await res.json()) as Record<string, unknown>[];
       const fresh = buildLines(rows);

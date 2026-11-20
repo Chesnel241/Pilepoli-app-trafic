@@ -1,3 +1,4 @@
+import { datasetHeaders } from './datasets.ts';
 /**
  * Sorties (accès) des gares, à partir de l'open data d'IDFM (sans clé) :
  *   zone de correspondance (l'arrêt affiché) → zones d'arrêt (zones-d-arrets)
@@ -21,7 +22,7 @@ async function records(ds: string, where: string, limit = 100): Promise<any[]> {
   const url = new URL(`${ODS}/${ds}/records`);
   url.searchParams.set('where', where);
   url.searchParams.set('limit', String(limit));
-  const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+  const res = await fetch(url, { headers: datasetHeaders(), signal: AbortSignal.timeout(15_000) });
   if (!res.ok) throw new Error(`${ds} : ${res.status}`);
   return ((await res.json()) as any).results ?? [];
 }
