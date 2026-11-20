@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import { Text } from './Text';
-import { LineBadge } from './ui';
+import { LineCloud } from './LineCloud';
 import { LineSheet, type SheetLine } from './LineSheet';
 import { LEVEL, modeKey, type ModeKey } from '../lib/lines';
 import { t } from '../lib/i18n';
@@ -52,24 +52,16 @@ export function NetworkDashboard({ nearby, report }: { nearby: NearbyStop[] | nu
       </View>
 
       {lines.length ? (
-        <View style={s.chips}>
-          {lines.map((l) => {
-            const lv = l.traffic ? LEVEL[l.traffic.level] : null;
-            const problem = l.traffic && l.traffic.level !== 'ok';
-            return (
-              <Pressable
-                key={l.key}
-                onPress={() => setSheet({ code: l.code, color: l.color, textColor: l.textColor, mode: l.mode, level: l.traffic?.level ?? 'ok', disruptions: l.traffic?.disruptions ?? [] })}
-                style={[s.chip, problem && s.chipOn]}
-                accessibilityRole="button"
-                accessibilityLabel={`${t('common.line', { code: l.code })} : ${t(`lvl.${l.traffic?.level ?? 'ok'}`)}`}
-              >
-                <LineBadge code={l.code} color={l.color} textColor={l.textColor} size={32} round={l.mode === 'metro'} />
-                <View style={[s.status, { backgroundColor: known ? (lv?.dot ?? LEVEL.ok.dot) : '#C9C9D3' }]} />
-              </Pressable>
-            );
-          })}
-        </View>
+        <LineCloud
+          cols={6}
+          calmFill="#FFFFFF"
+          showWord={false}
+          lines={lines.map((l) => ({ key: l.key, code: l.code, color: l.color, textColor: l.textColor, mode: l.mode, level: l.traffic?.level ?? (known ? 'ok' : undefined) }))}
+          onOpen={(c) => {
+            const l = lines.find((x) => x.key === c.key);
+            if (l) setSheet({ code: l.code, color: l.color, textColor: l.textColor, mode: l.mode, level: l.traffic?.level ?? 'ok', disruptions: l.traffic?.disruptions ?? [] });
+          }}
+        />
       ) : null}
 
       <LineSheet line={sheet} onClose={() => setSheet(null)} />
@@ -88,10 +80,6 @@ const s = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   dot: { width: 12, height: 12, borderRadius: 6 },
   headline: { flex: 1, fontFamily: fonts.display, fontSize: 20, lineHeight: 24, color: colors.ink },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { padding: 4, borderRadius: 14, borderWidth: 2, borderColor: 'transparent' },
-  chipOn: { borderColor: '#D12F35' },
-  status: { position: 'absolute', right: 0, top: 0, width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: colors.soft },
   msg: { borderRadius: radius.md, padding: 12, gap: 4 },
   msgTitle: { fontFamily: fonts.bold, fontSize: 15, lineHeight: 20 },
   msgBody: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 19, color: '#3A3D46' },

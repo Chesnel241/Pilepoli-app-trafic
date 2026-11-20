@@ -5,6 +5,7 @@ import * as Haptics from 'expo-haptics';
 import { Text, TextInput } from '../components/Text';
 import { BottomNav, LineBadge } from '../components/ui';
 import { LineSheet, type SheetLine } from '../components/LineSheet';
+import { LineCloud, Shape } from '../components/LineCloud';
 import { fetchLines, fetchTraffic } from '../lib/api';
 import { cleanTitle, lineName } from '../lib/disruption';
 import { LEVEL, METRO, RER, modeKey, type ModeKey } from '../lib/lines';
@@ -81,6 +82,7 @@ export default function Trafic() {
   const watch = shown.flatMap((m) => byMode[m]).filter((x) => x.traffic && (x.traffic.level === 'perturbe' || x.traffic.level === 'interrompu'))
     .sort((a, b) => RANK[a.traffic!.level] - RANK[b.traffic!.level]);
   const headline = !report ? t('traffic.looking') : watch.length === 0 ? t('traffic.allGood') : watch.length === 1 ? t('traffic.oneBig') : t('traffic.manyBig', { n: watch.length });
+  const known = !!report && !report.error;
   const age = report ? Math.max(0, Math.round((Date.now() - Date.parse(report.fetchedAt)) / 1000)) : null;
 
   const open = (tl: Tile) => setSheet({
@@ -138,26 +140,27 @@ export default function Trafic() {
               style={s.search} autoCapitalize="characters" autoCorrect={false} returnKeyType="search" accessibilityLabel={t('traffic.busSearch')} />
             {busQuery ? (
               busFound.length ? (
-                <Grid tiles={busFound.map((l) => ({ key: l.lineId, code: l.code, color: l.color, textColor: l.textColor, mode: 'bus' as ModeKey, traffic: l }))} onOpen={open} />
+                <Grid known={known} tiles={busFound.map((l) => ({ key: l.lineId, code: l.code, color: l.color, textColor: l.textColor, mode: 'bus' as ModeKey, traffic: l }))} onOpen={open} />
               ) : <View style={s.ok}><Text style={s.okText}>{t('traffic.busOk', { code: busQuery })}</Text></View>
             ) : null}
             {byMode.bus.length ? <Text style={s.gridTitle}>{t('traffic.busTroubled')}</Text> : null}
-            <Grid tiles={byMode.bus} onOpen={open} />
+            <Grid known={known} tiles={byMode.bus} onOpen={open} />
           </View>
         ) : (
           shown.map((m) => byMode[m].length ? (
             <View key={m} style={{ gap: 10 }}>
               <Text style={s.gridTitle}>{t(SECTION_LABEL[m])}</Text>
-              <Grid tiles={byMode[m]} onOpen={open} />
+              <Grid known={known} tiles={byMode[m]} onOpen={open} />
             </View>
           ) : null)
         )}
 
         <View style={s.legend}>
           {(['ok', 'travaux', 'perturbe', 'interrompu'] as const).map((k) => (
-            <View key={k} style={s.legendItem}><View style={[s.legendDot, { backgroundColor: LEVEL[k].dot }]} /><Text style={s.legendText}>{t(`lvl.${k}`)}</Text></View>
+            <View key={k} style={s.legendItem}><Shape fill={k === 'ok' ? colors.soft : LEVEL[k].bg} size={16} /><Text style={s.legendText}>{t(`lvl.${k}`)}</Text></View>
           ))}
         </View>
+        <Text style={s.hint}>{t('traffic.motionHint')}</Text>
       </ScrollView>
       <LineSheet line={sheet} onClose={() => setSheet(null)} />
       <BottomNav active="trafic" />
@@ -165,27 +168,14 @@ export default function Trafic() {
   );
 }
 
-/** Petites cartes de ligne : badge, et l'état écrit dessous. */
-function Grid({ tiles, onOpen }: { tiles: Tile[]; onOpen: (t: Tile) => void }) {
-  const { t } = useI18n();
+/** Le nuage de lignes d'une section : l'état vient des vraies infos, sinon la ligne reste neutre. */
+function Grid({ tiles, onOpen, known }: { tiles: Tile[]; onOpen: (t: Tile) => void; known: boolean }) {
+  const byKey = new Map(tiles.map((tl) => [tl.key, tl]));
   return (
-    <View style={s.grid}>
-      {tiles.map((tl) => {
-        const level = tl.traffic?.level ?? 'ok';
-        const lv = LEVEL[level];
-        const calm = level === 'ok' || level === 'info';
-        return (
-          <Pressable key={tl.key} onPress={() => onOpen(tl)} style={({ pressed }) => [s.tile, !calm && { backgroundColor: lv.bg, borderColor: lv.bg }, pressed && { opacity: 0.7 }]}
-            accessibilityRole="button" accessibilityLabel={`${lineName(tl.code, tl.mode)} : ${t(`lvl.${level}`)}`}>
-            <LineBadge code={tl.code} color={tl.color} textColor={tl.textColor} size={38} round={tl.mode === 'metro'} />
-            <View style={s.tileState}>
-              <View style={[s.tileDot, { backgroundColor: lv.dot }]} />
-              <Text style={[s.tileText, !calm && { color: lv.fg }]} numberOfLines={1}>{t(`lvl.${level}`)}</Text>
-            </View>
-          </Pressable>
-        );
-      })}
-    </View>
+    <LineCloud
+      lines={tiles.map((tl) => ({ key: tl.key, code: tl.code, color: tl.color, textColor: tl.textColor, mode: tl.mode, level: tl.traffic?.level ?? (known ? 'ok' : undefined) }))}
+      onOpen={(l) => { const tl = byKey.get(l.key); if (tl) onOpen(tl); }}
+    />
   );
 }
 
@@ -206,16 +196,11 @@ const s = StyleSheet.create({
   watchTitle: { fontFamily: fonts.semi, fontSize: 15, lineHeight: 20, color: colors.ink },
   chev: { fontFamily: fonts.bold, fontSize: 22, color: colors.muted },
   gridTitle: { fontFamily: fonts.bold, fontSize: 13, color: colors.muted, letterSpacing: 1, textTransform: 'uppercase' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  tile: { width: '23%', minWidth: 74, flexGrow: 1, maxWidth: '25%', alignItems: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 4, borderRadius: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.line },
-  tileState: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '100%' },
-  tileDot: { width: 7, height: 7, borderRadius: 4 },
-  tileText: { fontFamily: fonts.bold, fontSize: 11, color: colors.muted, flexShrink: 1 },
   search: { minHeight: 54, borderRadius: 16, backgroundColor: colors.soft, paddingHorizontal: 16, fontFamily: fonts.bold, fontSize: 20, color: colors.ink, borderWidth: 1, borderColor: colors.line },
   ok: { backgroundColor: '#E7F7D9', borderRadius: radius.md, padding: 14 },
   okText: { fontFamily: fonts.semi, fontSize: 15, color: '#1F5E14' },
   legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendDot: { width: 10, height: 10, borderRadius: 5 },
+  hint: { fontFamily: fonts.medium, fontSize: 13, lineHeight: 18, color: colors.muted, marginTop: -6 },
   legendText: { fontFamily: fonts.semi, fontSize: 13, color: '#3A3D46' },
 });
