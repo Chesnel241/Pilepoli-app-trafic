@@ -5,12 +5,14 @@ import { Text, TextInput, type TextInputHandle } from '../components/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect, router } from 'expo-router';
 import * as Location from 'expo-location';
-import { ALLOW_LOCAL, fetchDepartures, fetchNearby, searchPlaces, useOnline } from '../lib/api';
+import { ALLOW_LOCAL, fetchDepartures, fetchNearby, fetchTraffic, searchPlaces, useOnline } from '../lib/api';
 import { loadFavorites, saveFavorite, type FavKind, type Favorites } from '../lib/favorites';
 import { depLabel, predictionLabel } from '../lib/labels';
 import { getSettings, useI18n, useSettings } from '../lib/settings';
 import { hhmm, trip } from '../lib/trip';
-import type { Journey, NearbyStop, Place, RatedDeparture } from '../lib/types';
+import type { Journey, NearbyStop, Place, RatedDeparture, TrafficReport } from '../lib/types';
+import { NetworkDashboard } from '../components/NetworkDashboard';
+import { NearbyMap } from '../components/NearbyMap';
 import { BottomNav, LineBadge, Logo, StatusChip } from '../components/ui';
 import { IconChevron, IconHome, IconPin, IconSearch, IconWork } from '../components/icons';
 import { colors, fonts, radius } from '../theme';
@@ -32,6 +34,7 @@ export default function Home() {
   const [searching, setSearching] = useState(false);
   const [departures, setDepartures] = useState<RatedDeparture[]>([]);
   const [nearby, setNearby] = useState<NearbyStop[] | null>(null);
+  const [report, setReport] = useState<TrafficReport | null>(null);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
   const [recent, setRecent] = useState<{ id: string; name: string }[]>([]);
   const [favs, setFavs] = useState<Favorites>({});
@@ -97,6 +100,15 @@ export default function Home() {
     const id = setInterval(load, 30_000);
     return () => { alive = false; clearInterval(id); };
   }, [coords]);
+
+  // État du trafic, partagé par le moteur (une requête par minute suffit).
+  useEffect(() => {
+    let alive = true;
+    const load = async () => { const r = await fetchTraffic(); if (alive) setReport(r); };
+    load();
+    const id = setInterval(load, 60_000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
 
   // Recherche de destination pendant la frappe.
   useEffect(() => {
@@ -196,9 +208,10 @@ export default function Home() {
     );
   };
 
+  // Sans position (démo), le tableau de bord se base sur l'arrêt de démonstration.
+  const dashStops: NearbyStop[] | null = nearby ?? (departures.length ? [{ stopRef: DEMO_STOP, placeId: '', areaNumber: '', name: '', distance: 0, departures }] : null);
+
   const freshness = fetchedAt ? Math.max(0, Math.round((Date.now() - fetchedAt) / 1000)) : null;
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? t('home.morning') : hour < 18 ? t('home.afternoon') : t('home.evening');
   const favTile = (kind: FavKind, bg: string, fg: string, icon: ReactNode, label: string) => {
     const f = favs[kind];
     return (
@@ -241,7 +254,10 @@ export default function Home() {
 
         {!online ? <View style={s.offline}><Text style={s.offlineText}>{t('home.offline')}</Text></View> : null}
 
-        <Text style={s.h1} accessibilityRole="header">{greeting}{'\n'}{t('home.where')}</Text>
+        {/* D'abord l'état du trafic autour de toi : c'est ce qu'on vient chercher le plus souvent. */}
+        <NetworkDashboard nearby={dashStops} report={report} />
+
+        <Text style={s.h1} accessibilityRole="header">{t('home.where')}</Text>
 
         {editingFrom ? (
           <View style={{ gap: 8 }}>
@@ -334,6 +350,8 @@ export default function Home() {
           </>
         )}
 
+        {nearby && nearby.length ? <NearbyMap stops={nearby} me={coords} /> : null}
+
         <View style={s.nearHead}>
           <Text style={s.h2}>{t('home.nearby')}</Text>
           <View style={s.freshness}>
@@ -373,7 +391,7 @@ const s = StyleSheet.create({
   header: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   settingsBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.soft, alignItems: 'center', justifyContent: 'center' },
   settingsText: { fontFamily: fonts.display, fontSize: 17, color: colors.ink },
-  h1: { fontFamily: fonts.display, fontSize: 38, lineHeight: 40, color: colors.ink, letterSpacing: -1 },
+  h1: { fontFamily: fonts.display, fontSize: 30, lineHeight: 33, color: colors.ink, letterSpacing: -0.8, marginTop: 4 },
   h2: { fontFamily: fonts.bold, fontSize: 18, color: colors.ink },
   muted: { fontFamily: fonts.medium, fontSize: 14, color: colors.muted },
   resume: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.ink, borderRadius: radius.md, padding: 16 },

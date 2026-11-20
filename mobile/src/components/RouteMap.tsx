@@ -1,44 +1,36 @@
 import { useMemo, useRef } from 'react';
-import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import MapView from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from './Text';
-import { IconButton, PulseDot } from './ui';
+import { IconButton } from './ui';
 import { IconClose } from './icons';
+import { PlaceLabel, mapLook, useFrozenMarkers } from './MapBits';
+import { RouteLines, VehicleMarker, keyStops } from './RouteCard';
 import { t } from '../lib/i18n';
 import type { LonLat, Route } from '../lib/route';
+import type { GuideStop } from '../lib/trip';
+import type { LegMode } from '../lib/types';
 import { colors, fonts, radius } from '../theme';
 
-/** Style Google Maps (Android) doux, proche du fond de la carte compacte : peu de couleurs, pas de commerces. */
-const ANDROID_STYLE = [
-  { elementType: 'geometry', stylers: [{ color: '#efefe6' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#5c5f6a' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }] },
-  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ visibility: 'on' }, { color: '#e2e8d4' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-  { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit', stylers: [{ visibility: 'simplified' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#d6dde6' }] },
-];
-
 const ll = (p: LonLat) => ({ longitude: p[0], latitude: p[1] });
+const short = (name: string) => name.replace(/\s*\(.*\)$/, '').trim();
 
-/** La carte complète du trajet, en plein écran : tracé coloré par ligne, ta position, départ et arrivée. */
-export function RouteMap({ visible, onClose, route, here, source }: {
-  visible: boolean; onClose: () => void; route: Route; here: LonLat | null; source: 'gps' | 'estime';
+/** La carte complète du trajet, en plein écran, dans le même esprit que la carte du guidage. */
+export function RouteMap({ visible, onClose, route, stops, here, source, mode }: {
+  visible: boolean; onClose: () => void; route: Route; stops: GuideStop[]; here: LonLat | null; source: 'gps' | 'estime'; mode: LegMode;
 }) {
   const map = useRef<MapView>(null);
-  const region = useMemo(() => {
-    const { minLon, maxLon, minLat, maxLat } = route.bounds;
-    return {
-      latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2,
-      latitudeDelta: Math.max(0.01, (maxLat - minLat) * 1.5), longitudeDelta: Math.max(0.01, (maxLon - minLon) * 1.5),
-    };
-  }, [route]);
-  const start = route.timeline[0].p;
-  const end = route.timeline[route.timeline.length - 1].p;
+  const track = useFrozenMarkers([visible, mode]);
+  const labels = useMemo(() => keyStops(stops), [stops]);
+  // Tous les arrêts du trajet, en petit : on peut compter ceux qui restent.
+  const minor = useMemo(() => stops.filter((st) => st.lat !== undefined && !labels.includes(st)), [stops, labels]);
+  const color = stops.find((st) => st.mode === mode)?.color ?? colors.violet;
 
+  const fit = () => {
+    const pts = route.segments.flatMap((sg) => sg.points).map(ll);
+    map.current?.fitToCoordinates(pts, { edgePadding: { top: 120, right: 50, bottom: 120, left: 50 }, animated: false });
+  };
   const recenter = () => {
     if (here) map.current?.animateToRegion({ ...ll(here), latitudeDelta: 0.012, longitudeDelta: 0.012 }, 350);
   };
@@ -46,43 +38,16 @@ export function RouteMap({ visible, onClose, route, here, source }: {
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} presentationStyle="fullScreen">
       <View style={s.screen}>
-        <MapView
-          ref={map}
-          style={StyleSheet.absoluteFill}
-          provider={PROVIDER_DEFAULT}
-          initialRegion={region}
-          mapType={Platform.OS === 'ios' ? 'mutedStandard' : 'standard'}
-          customMapStyle={Platform.OS === 'android' ? ANDROID_STYLE : undefined}
-          showsUserLocation
-          showsMyLocationButton={false}
-          showsPointsOfInterests={false}
-          showsCompass={false}
-          toolbarEnabled={false}
-          pitchEnabled={false}
-        >
-          {route.segments.map((sg, i) => (
-            <Polyline
-              key={i}
-              coordinates={sg.points.map(ll)}
-              strokeColor={sg.mode === 'walk' ? colors.ink : sg.color}
-              strokeWidth={sg.mode === 'walk' ? 3 : 6}
-              lineDashPattern={sg.mode === 'walk' ? [2, 8] : undefined}
-              lineCap="round"
-              lineJoin="round"
-            />
+        <MapView ref={map} style={StyleSheet.absoluteFill} {...mapLook} showsUserLocation showsMyLocationButton={false} onMapReady={fit}>
+          <RouteLines route={route} width={6} />
+          {minor.map((st, i) => (
+            <PlaceLabel key={`m${i}`} lat={st.lat!} lon={st.lon!} name={short(st.name)} strong={false} track={track} />
           ))}
-          <Marker coordinate={ll(start)} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
-            <View style={s.startPin} />
-          </Marker>
-          <Marker coordinate={ll(end)} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
-            <View style={s.endPin} />
-          </Marker>
-          {/* Sans GPS, on montre où tu devrais être d'après les horaires (le point bleu du système reste la vraie position). */}
-          {here && source === 'estime' ? (
-            <Marker coordinate={ll(here)} anchor={{ x: 0.5, y: 0.5 }}>
-              <View style={s.estimate}><PulseDot color={colors.violet} size={14} /></View>
-            </Marker>
-          ) : null}
+          {labels.map((st, i) => (
+            <PlaceLabel key={`k${i}`} lat={st.lat!} lon={st.lon!} name={short(st.name)} track={track}
+              strong side={i === labels.length - 1 ? 'left' : 'right'} />
+          ))}
+          {here ? <VehicleMarker p={here} mode={mode} color={color} track={track} /> : null}
         </MapView>
 
         <SafeAreaView style={s.overlay} pointerEvents="box-none">
@@ -102,14 +67,11 @@ export function RouteMap({ visible, onClose, route, here, source }: {
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#EFEFE6' },
+  screen: { flex: 1, backgroundColor: '#EEEEEA' },
   overlay: { flex: 1, justifyContent: 'space-between', padding: 16 },
   top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   recenter: { backgroundColor: colors.ink, borderRadius: radius.pill, paddingVertical: 12, paddingHorizontal: 18 },
   recenterText: { fontFamily: fonts.bold, fontSize: 15, color: '#FFFFFF' },
   note: { backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: radius.md, padding: 12 },
   noteText: { fontFamily: fonts.semi, fontSize: 14, lineHeight: 19, color: colors.ink },
-  startPin: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#FFFFFF', borderWidth: 4, borderColor: colors.ink },
-  endPin: { width: 20, height: 20, borderRadius: 10, backgroundColor: colors.lime, borderWidth: 4, borderColor: colors.ink },
-  estimate: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.9)', alignItems: 'center', justifyContent: 'center' },
 });

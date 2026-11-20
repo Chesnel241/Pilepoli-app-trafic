@@ -9,25 +9,42 @@ const iso = (now: number, deltaMin: number) => new Date(now + deltaMin * 60_000)
 const ago = (now: number, seconds: number) => new Date(now - seconds * 1000).toISOString();
 
 export function mockDepartures(stopRef: string, now: number = Date.now()): Departure[] {
-  return [
+  const base: Departure[] = [
     {
-      journeyRef: 'mock-B-1', lineRef: 'mock:B', lineCode: 'B', destination: 'Robinson', direction: 'Sud',
+      journeyRef: 'mock-B-1', lineRef: 'mock:B', lineCode: 'B', lineColor: '#3C91DC', lineTextColor: '#FFFFFF', mode: 'rer', destination: 'Robinson', direction: 'Sud',
       aimedAt: iso(now, 3), expectedAt: iso(now, 3), recordedAt: ago(now, 15), operatorStatus: 'onTime', platform: '2',
     },
     {
-      journeyRef: 'mock-38-1', lineRef: 'mock:38', lineCode: '38', destination: "Porte d'Orléans",
+      journeyRef: 'mock-38-1', lineRef: 'mock:38', lineCode: '38', lineColor: '#82C8E6', lineTextColor: '#0E0F12', mode: 'bus', destination: "Porte d'Orléans",
       aimedAt: iso(now, 6), expectedAt: iso(now, 7), recordedAt: ago(now, 110), operatorStatus: 'delayed',
     },
     {
-      journeyRef: 'mock-302-1', lineRef: 'mock:302', lineCode: '302', destination: 'Stains',
+      journeyRef: 'mock-302-1', lineRef: 'mock:302', lineCode: '302', lineColor: '#6E6E6E', lineTextColor: '#FFFFFF', mode: 'bus', destination: 'Stains',
       aimedAt: iso(now, 2), expectedAt: iso(now, 2), recordedAt: ago(now, 720),
     },
     {
-      journeyRef: 'mock-B-2', lineRef: 'mock:B', lineCode: 'B', destination: 'Aéroport CDG 2', direction: 'Nord',
+      journeyRef: 'mock-B-2', lineRef: 'mock:B', lineCode: 'B', lineColor: '#3C91DC', lineTextColor: '#FFFFFF', mode: 'rer', destination: 'Aéroport CDG 2', direction: 'Nord',
       aimedAt: iso(now, 5), expectedAt: null, recordedAt: null,
     },
-  ].map((d) => ({ ...d, journeyRef: `${stopRef}:${d.journeyRef}` }));
+  ];
+  return [...base, ...(EXTRA[stopRef]?.(now) ?? [])]
+    .filter((d) => !EXTRA[stopRef] || !/^mock-(38|302)/.test(d.journeyRef))
+    .map((d) => ({ ...d, journeyRef: `${stopRef}:${d.journeyRef}` }));
 }
+
+/** Quelques lignes en plus selon l'arrêt simulé, pour que la carte « Autour de toi » ait l'air vraie. */
+const EXTRA: Record<string, (now: number) => Departure[]> = {
+  'STIF:StopArea:SP:mock-mag:': (now) => [
+    { journeyRef: 'mock-E-1', lineRef: 'mock:E', lineCode: 'E', lineColor: '#C04191', lineTextColor: '#FFFFFF', mode: 'rer', destination: 'Nanterre', aimedAt: iso(now, 4), expectedAt: iso(now, 4), recordedAt: ago(now, 20) },
+  ],
+  'STIF:StopArea:SP:mock-est:': (now) => [
+    { journeyRef: 'mock-4-1', lineRef: 'mock:4', lineCode: '4', lineColor: '#CF009E', lineTextColor: '#FFFFFF', mode: 'metro', destination: 'Bagneux', aimedAt: iso(now, 2), expectedAt: iso(now, 2), recordedAt: ago(now, 10) },
+    { journeyRef: 'mock-7-1', lineRef: 'mock:7', lineCode: '7', lineColor: '#FA9ABA', lineTextColor: '#0E0F12', mode: 'metro', destination: 'Villejuif', aimedAt: iso(now, 3), expectedAt: iso(now, 3), recordedAt: ago(now, 30) },
+  ],
+  'STIF:StopArea:SP:mock-laf:': (now) => [
+    { journeyRef: 'mock-7b-1', lineRef: 'mock:7', lineCode: '7', lineColor: '#FA9ABA', lineTextColor: '#0E0F12', mode: 'metro', destination: 'La Courneuve', aimedAt: iso(now, 5), expectedAt: iso(now, 6), recordedAt: ago(now, 40) },
+  ],
+};
 
 export function mockJourneys(now: number = Date.now()): Journey[] {
   const t = (m: number) => iso(now, m);
@@ -102,7 +119,9 @@ export function mockPlaces(q: string): Place[] {
 
 export function mockNearby() {
   return [
-    { stopRef: 'STIF:StopArea:SP:mock-gdn:', placeId: 'mock:gare-du-nord', areaNumber: 'mock-gdn', name: 'Gare du Nord', distance: 140 },
-    { stopRef: 'STIF:StopArea:SP:mock-laf:', placeId: 'mock:lafayette', areaNumber: 'mock-laf', name: 'Lafayette', distance: 320 },
+    { stopRef: 'STIF:StopArea:SP:mock-gdn:', placeId: 'mock:gare-du-nord', areaNumber: 'mock-gdn', name: 'Gare du Nord', distance: 140, lat: 48.8809, lon: 2.3553 },
+    { stopRef: 'STIF:StopArea:SP:mock-laf:', placeId: 'mock:lafayette', areaNumber: 'mock-laf', name: 'Lafayette', distance: 320, lat: 48.8768, lon: 2.3532 },
+    { stopRef: 'STIF:StopArea:SP:mock-mag:', placeId: 'mock:magenta', areaNumber: 'mock-mag', name: 'Magenta', distance: 260, lat: 48.8822, lon: 2.3567 },
+    { stopRef: 'STIF:StopArea:SP:mock-est:', placeId: 'mock:gare-de-l-est', areaNumber: 'mock-est', name: "Gare de l'Est", distance: 480, lat: 48.8763, lon: 2.3589 },
   ];
 }

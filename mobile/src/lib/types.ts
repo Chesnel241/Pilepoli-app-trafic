@@ -107,6 +107,8 @@ export interface NearbyStop {
   areaNumber: string;
   name: string;
   distance: number;
+  lat?: number;
+  lon?: number;
   departures: RatedDeparture[];
 }
 

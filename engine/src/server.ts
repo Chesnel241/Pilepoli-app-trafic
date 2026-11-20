@@ -158,7 +158,8 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     // Arrondi à ~100 m : deux voisins partagent le même appel, et la position exacte n'est pas gardée.
     const key = `${c.lon.toFixed(3)};${c.lat.toFixed(3)}`;
     const list = MODE === 'prim' ? await nearbyCache.wrap(key, () => prim.nearby(Number(c.lon.toFixed(3)), Number(c.lat.toFixed(3)), API_KEY)) : mock.mockNearby();
-    const top = list.slice(0, 3);
+    // Les 5 plus proches : assez pour la carte, sans épuiser le quota (chaque arrêt est en cache 20 s).
+    const top = list.slice(0, 5);
     const snaps = await Promise.all(top.map((st) => stopSnapshot(st.stopRef).catch(() => null)));
     return send(res, 200, {
       stops: top.map((st, i) => ({ ...st, departures: snaps[i]?.departures.slice(0, 4) ?? [], anomalies: snaps[i]?.anomalies ?? [] })),

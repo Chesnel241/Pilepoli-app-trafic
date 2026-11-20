@@ -259,6 +259,21 @@ const fr = {
   'map.close': 'Fermer la carte',
   'map.recenter': 'Recentrer',
   'map.estimatedNote': 'Sans GPS (souterrain, signal faible), la position suit les horaires prévus.',
+  'map.left': 'Il reste {n} min',
+  'map.remaining': 'restantes',
+  'map.distance': 'à parcourir',
+
+  // Tableau de bord trafic (accueil)
+  'dash.title': 'Ton réseau, ici',
+  'dash.allGood': 'Tout roule autour de toi.',
+  'dash.oneBad': '{line} perturbé autour de toi.',
+  'dash.manyBad': '{n} lignes perturbées autour de toi.',
+  'dash.works': 'Travaux sur {line}.',
+  'dash.loading': 'On regarde l’état des lignes autour de toi…',
+  'dash.noLines': 'Aucune ligne trouvée autour de toi pour le moment.',
+  'dash.allNetwork': 'Tout le réseau',
+  'dash.mapTitle': 'Stations proches',
+  'dash.seeStop': 'Voir {name}',
 } as const;
 
 export type Key = keyof typeof fr;
@@ -487,6 +502,19 @@ const en: Record<Key, string> = {
   'map.close': 'Close the map',
   'map.recenter': 'Recenter',
   'map.estimatedNote': 'Without GPS (underground, weak signal), the position follows scheduled times.',
+  'map.left': '{n} min left',
+  'map.remaining': 'left',
+  'map.distance': 'to go',
+  'dash.title': 'Your network, here',
+  'dash.allGood': 'Everything’s running around you.',
+  'dash.oneBad': '{line} disrupted near you.',
+  'dash.manyBad': '{n} lines disrupted near you.',
+  'dash.works': 'Works on {line}.',
+  'dash.loading': 'Checking the lines around you…',
+  'dash.noLines': 'No line found around you right now.',
+  'dash.allNetwork': 'Whole network',
+  'dash.mapTitle': 'Nearby stations',
+  'dash.seeStop': 'See {name}',
 };
 
 const dicts: Record<Lang, Record<Key, string>> = { fr, en };

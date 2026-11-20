@@ -194,7 +194,6 @@ export default function EnRoute() {
   const c = state.card;
   const canReroute = !!trip.endpoints();
   const ends = trip.endpoints();
-  const fromName = ends?.fromName || j.legs[0]?.from || t('choice.yourPosition');
   const toName = ends?.toName || j.legs[j.legs.length - 1]?.to || t('g.destination');
   // Le mode en cours : celui du tronçon où l'on est (marche pendant une correspondance).
   const curMode = state.phase === 'walking' ? 'walk' : stops[Math.min(state.at, stops.length - 1)]?.mode ?? 'metro';
@@ -202,8 +201,8 @@ export default function EnRoute() {
   const liveFix = offset === 0 ? fix : null;
   const here = route ? whereAmI(route, now, liveFix) : null;
   const card = (
-    <RouteCard journey={j} route={route} now={now} fix={liveFix} mode={curMode}
-      onOpen={() => route && setMapOpen(true)} fromName={fromName} toName={toName} />
+    <RouteCard journey={j} route={route} stops={stops} now={now} fix={liveFix} mode={curMode}
+      onOpen={() => route && setMapOpen(true)} toName={toName} />
   );
   return (
     <SafeAreaView style={s.screen}>
@@ -289,7 +288,7 @@ export default function EnRoute() {
       ) : null}
 
       {route && mapOpen ? (
-        <RouteMap visible={mapOpen} onClose={() => setMapOpen(false)} route={route} here={here?.p ?? null} source={here?.source ?? 'estime'} />
+        <RouteMap visible={mapOpen} onClose={() => setMapOpen(false)} route={route} stops={stops} here={here?.p ?? null} source={here?.source ?? 'estime'} mode={curMode} />
       ) : null}
 
       {view === 'guide' ? (

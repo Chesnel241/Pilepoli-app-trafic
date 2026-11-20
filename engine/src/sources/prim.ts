@@ -156,6 +156,8 @@ export interface NearbyStop {
   areaNumber: string;
   name: string;
   distance: number;
+  lat?: number;
+  lon?: number;
 }
 
 /** stop_area:IDFM:71410 → STIF:StopArea:SP:71410: */
@@ -170,6 +172,7 @@ export function parseNearby(json: any): NearbyStop[] {
       areaNumber: p.id.split(':').pop(),
       name: p.stop_area?.name ?? p.name ?? '',
       distance: Math.round(Number(p.distance ?? 0)),
+      ...coordOf(p.stop_area?.coord),
     }));
 }
 
