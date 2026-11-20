@@ -250,6 +250,15 @@ const fr = {
 
   // Confidentialité
   'priv.title': 'Confidentialité',
+
+  // Carte
+  'map.open': 'Ouvre la carte du trajet',
+  'map.gps': 'Position GPS',
+  'map.estimated': 'Position estimée',
+  'map.map': 'Carte',
+  'map.close': 'Fermer la carte',
+  'map.recenter': 'Recentrer',
+  'map.estimatedNote': 'Sans GPS (souterrain, signal faible), la position suit les horaires prévus.',
 } as const;
 
 export type Key = keyof typeof fr;
@@ -471,6 +480,13 @@ const en: Record<Key, string> = {
   'onb.later': 'Later',
   'onb.start': 'Let’s go',
   'priv.title': 'Privacy',
+  'map.open': 'Opens the trip map',
+  'map.gps': 'GPS position',
+  'map.estimated': 'Estimated position',
+  'map.map': 'Map',
+  'map.close': 'Close the map',
+  'map.recenter': 'Recenter',
+  'map.estimatedNote': 'Without GPS (underground, weak signal), the position follows scheduled times.',
 };
 
 const dicts: Record<Lang, Record<Key, string>> = { fr, en };

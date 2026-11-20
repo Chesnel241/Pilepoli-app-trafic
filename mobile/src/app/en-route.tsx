@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '../components/Text';
 import * as Haptics from 'expo-haptics';
 import * as Speech from 'expo-speech';
@@ -17,6 +17,10 @@ import { IconButton, LineBadge, PulseDot } from '../components/ui';
 import { IconClose } from '../components/icons';
 import { TrainTrack } from '../components/TrainTrack';
 import { GuideView } from '../components/GuideView';
+import { ModeAnimation } from '../components/ModeAnimation';
+import { RouteCard, whereAmI, type Fix } from '../components/RouteCard';
+import { RouteMap } from '../components/RouteMap';
+import { buildRoute } from '../lib/route';
 import { colors, fonts, radius } from '../theme';
 
 /** Après Go : la consigne du moment en haut, tous les arrêts en dessous. Rien à toucher. */
@@ -33,7 +37,9 @@ export default function EnRoute() {
   // Grand affichage pas à pas par défaut ; la liste des arrêts en un tap.
   const [view, setView] = useState<'guide' | 'list'>('guide');
   const [voiceOn, setVoiceOn] = useState(settings.voiceAuto);
-  const trainX = useRef(new Animated.Value(-160)).current;
+  const [mapOpen, setMapOpen] = useState(false);
+  const [fix, setFix] = useState<Fix | null>(null);
+  const route = useMemo(() => (j ? buildRoute(j) : null), [j]);
 
   // Recalcul : une ligne du trajet perturbée, et les autres trajets possibles.
   const [alert, setAlert] = useState<LineTraffic | null>(null);
@@ -55,12 +61,25 @@ export default function EnRoute() {
   }, [j, stops]);
 
   useEffect(() => {
-    trainX.setValue(-160);
-    const train = Animated.timing(trainX, { toValue: 160, duration: 2200, easing: Easing.inOut(Easing.cubic), useNativeDriver: true });
-    train.start();
     const id = setTimeout(() => setBoarding(false), 3000);
-    return () => { train.stop(); clearTimeout(id); };
-  }, [trainX]);
+    return () => clearTimeout(id);
+  }, []);
+
+  // Position GPS pendant le trajet (appli ouverte seulement, jamais en arrière-plan), pour la carte.
+  useEffect(() => {
+    let sub: Location.LocationSubscription | null = null;
+    let alive = true;
+    (async () => {
+      const perm = await Location.getForegroundPermissionsAsync();
+      if (!perm.granted || !alive) return;
+      sub = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.Balanced, distanceInterval: 15, timeInterval: 5000 },
+        (pos) => setFix({ p: [pos.coords.longitude, pos.coords.latitude], at: Date.now(), accuracy: pos.coords.accuracy ?? null }),
+      );
+      if (!alive) sub.remove();
+    })().catch(() => null);
+    return () => { alive = false; sub?.remove(); };
+  }, []);
 
   const now = tick + offset;
   const state = computeGuide(stops, now);
@@ -174,6 +193,18 @@ export default function EnRoute() {
 
   const c = state.card;
   const canReroute = !!trip.endpoints();
+  const ends = trip.endpoints();
+  const fromName = ends?.fromName || j.legs[0]?.from || t('choice.yourPosition');
+  const toName = ends?.toName || j.legs[j.legs.length - 1]?.to || t('g.destination');
+  // Le mode en cours : celui du tronçon où l'on est (marche pendant une correspondance).
+  const curMode = state.phase === 'walking' ? 'walk' : stops[Math.min(state.at, stops.length - 1)]?.mode ?? 'metro';
+  // En démo, l'horloge est décalée : la position GPS réelle ne correspond plus, on suit les horaires.
+  const liveFix = offset === 0 ? fix : null;
+  const here = route ? whereAmI(route, now, liveFix) : null;
+  const card = (
+    <RouteCard journey={j} route={route} now={now} fix={liveFix} mode={curMode}
+      onOpen={() => route && setMapOpen(true)} fromName={fromName} toName={toName} />
+  );
   return (
     <SafeAreaView style={s.screen}>
       <Modal visible={boarding} transparent={false} animationType="fade" onRequestClose={() => setBoarding(false)}>
@@ -184,14 +215,8 @@ export default function EnRoute() {
               <Text style={s.boardingCode}>{stops[0]?.lineCode}</Text>
             </View>
             <View style={s.trackWindow}>
-              <Animated.View style={[s.miniTrain, { transform: [{ translateX: trainX }] }]}>
-                {[0, 1, 2].map((car) => (
-                  <View key={car} style={[s.trainCar, car === 2 && s.trainHead]}>
-                    <View style={s.trainWindow} />
-                  </View>
-                ))}
-              </Animated.View>
-              <View style={s.trackLine} />
+              {/* L'animation du transport que tu vas prendre : métro, bus, tram, téléphérique… */}
+              <ModeAnimation mode={stops[0]?.mode ?? 'metro'} size={190} ink="#FFFFFF" glass={colors.violet} accent={colors.lime} playing={boarding} />
             </View>
             <View style={s.boardingCopy}>
               <Text style={s.boardingTitle}>{t('guide.letsGo')}</Text>
@@ -263,8 +288,13 @@ export default function EnRoute() {
         </View>
       ) : null}
 
+      {route && mapOpen ? (
+        <RouteMap visible={mapOpen} onClose={() => setMapOpen(false)} route={route} here={here?.p ?? null} source={here?.source ?? 'estime'} />
+      ) : null}
+
       {view === 'guide' ? (
         <View style={s.guideArea}>
+          {card}
           <GuideView state={state} stops={stops} voiceOn={voiceOn} onVoice={toggleVoice} />
           {ALLOW_LOCAL ? (
             <Pressable onPress={demo} style={s.demo} accessibilityRole="button">
@@ -274,6 +304,7 @@ export default function EnRoute() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+          {card}
           <View style={s.card} accessibilityLiveRegion="polite">
             <View style={s.cardHead}>
               <View style={s.row}>
@@ -310,12 +341,7 @@ const s = StyleSheet.create({
   boardingTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8 },
   boardingKicker: { fontFamily: fonts.bold, fontSize: 16, color: colors.violetSoft },
   boardingCode: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.lime, color: colors.ink, fontFamily: fonts.black, fontSize: 18, textAlign: 'center', textAlignVertical: 'center', overflow: 'hidden' },
-  trackWindow: { height: 180, justifyContent: 'center', alignItems: 'center' },
-  trackLine: { position: 'absolute', left: -24, right: -24, height: 12, borderRadius: 6, backgroundColor: '#FFFFFF', opacity: 0.25 },
-  miniTrain: { flexDirection: 'row', alignItems: 'center', zIndex: 2 },
-  trainCar: { width: 58, height: 92, borderRadius: 12, backgroundColor: colors.ink, borderWidth: 3, borderColor: '#FFFFFF', marginHorizontal: 2, alignItems: 'center', justifyContent: 'center' },
-  trainHead: { height: 104, borderTopRightRadius: 28, borderBottomRightRadius: 28 },
-  trainWindow: { width: 28, height: 18, borderRadius: 5, backgroundColor: colors.lime },
+  trackWindow: { height: 220, justifyContent: 'center', alignItems: 'center' },
   boardingCopy: { gap: 6, paddingBottom: 24 },
   boardingTitle: { fontFamily: fonts.display, fontSize: 42, lineHeight: 44, color: '#FFFFFF', letterSpacing: -1 },
   boardingSub: { fontFamily: fonts.semi, fontSize: 18, color: colors.violetSoft },

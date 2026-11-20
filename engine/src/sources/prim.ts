@@ -1,3 +1,4 @@
+import { coordOf, simplify } from '../geo/simplify.ts';
 import type { Departure, Journey, JourneyLeg, LegMode, Place } from '../types.ts';
 import { weakest } from '../reliability/freshness.ts';
 
@@ -88,7 +89,8 @@ function modeOf(section: any): LegMode {
   if (pm.includes('train')) return 'train';
   if (pm.includes('tram')) return 'tram';
   if (pm.includes('bus')) return 'bus';
-  if (pm.includes('câble') || pm.includes('cable') || pm.includes('téléphérique')) return 'cable';
+  if (pm.includes('câble') || pm.includes('cable') || pm.includes('téléphérique') || pm.includes('funiculaire')) return 'cable';
+  if (pm.includes('bateau') || pm.includes('navette fluviale') || pm.includes('ferry') || pm.includes('boat')) return 'boat';
   return 'other';
 }
 
@@ -114,7 +116,9 @@ export function parseJourneys(json: any): Journey[] {
           stops: (s.stop_date_times ?? []).map((st: any) => ({
             name: st.stop_point?.name ?? '',
             at: navitiaDate(st.departure_date_time ?? st.arrival_date_time),
+            ...coordOf(st.stop_point?.coord),
           })),
+          path: simplify(s.geojson?.coordinates),
           tips: [],
         };
       });

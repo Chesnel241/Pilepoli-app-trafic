@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Easing, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './Text';
 import type { GuideState } from '../lib/guide';
 import type { GuideStop } from '../lib/trip';
-import { IconWalk } from './icons';
+import { ModeAnimation } from './ModeAnimation';
 import { colors, fonts } from '../theme';
 import { isExitTip } from '../lib/i18n';
 import { useI18n } from '../lib/settings';
@@ -47,19 +47,33 @@ export function GuideView({ state, stops, voiceOn, onVoice }: {
   }, [urgent, pulse]);
 
   return (
-    <View style={[s.wrap, { backgroundColor: t.bg }]} accessibilityLiveRegion="polite">
+    <ScrollView
+      style={[s.outer, { backgroundColor: t.bg }]}
+      contentContainerStyle={s.wrap}
+      showsVerticalScrollIndicator={false}
+      bounces={false}
+      accessibilityLiveRegion="polite"
+    >
       <View style={s.lineRow}>
-        {state.phase === 'walking' ? (
-          <View style={[s.lineBadge, { backgroundColor: colors.ink }]}><IconWalk size={34} color={colors.lime} /></View>
-        ) : (
-          <View style={[s.lineBadge, { backgroundColor: c.badgeColor }]}>
-            <Text style={[s.lineBadgeText, { color: c.badgeText }]}>{c.badge}</Text>
-          </View>
-        )}
+        {/* En correspondance, le badge montre déjà la ligne suivante ; l'animation, elle, marche avec toi. */}
+        <View style={[s.lineBadge, { backgroundColor: c.badgeColor }]}>
+          <FixedText allowFontScaling={false} style={[s.lineBadgeText, { color: c.badgeText }]}>{c.badge}</FixedText>
+        </View>
         <View style={{ flex: 1 }}>
           <Text style={[s.kicker, { color: t.sub }]} numberOfLines={1}>{c.kicker}</Text>
           {b.direction ? <Text style={[s.direction, { color: t.fg }]} numberOfLines={2}>{tr('guide.direction', { dir: b.direction })}</Text> : null}
         </View>
+        {/* Le transport en cours, qui « vit » discrètement : il roule quand tu roules. */}
+        {state.phase !== 'arrived' ? (
+          <ModeAnimation
+            mode={state.phase === 'walking' ? 'walk' : (stops[state.at]?.mode ?? 'metro')}
+            size={64}
+            ink={state.phase === 'moving' ? '#FFFFFF' : colors.ink}
+            glass={state.phase === 'moving' ? colors.violet : state.phase === 'walking' ? colors.lime : '#FFFFFF'}
+            accent={state.phase === 'moving' ? colors.lime : state.phase === 'walking' ? '#FFFFFF' : colors.lime}
+            playing={state.phase === 'moving' || state.phase === 'walking'}
+          />
+        ) : null}
       </View>
 
       <Text style={[s.title, { color: t.fg }]} accessibilityRole="header">{c.title}</Text>
@@ -117,12 +131,13 @@ export function GuideView({ state, stops, voiceOn, onVoice }: {
           {voiceOn ? tr('guide.voiceOn') : tr('guide.listen')}
         </Text>
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
 const s = StyleSheet.create({
-  wrap: { flex: 1, borderRadius: 32, padding: 22, gap: 18 },
+  outer: { flex: 1, borderRadius: 32 },
+  wrap: { flexGrow: 1, padding: 22, gap: 18 },
   lineRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   lineBadge: { width: 64, height: 64, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   lineBadgeText: { fontFamily: fonts.display, fontSize: 34 },

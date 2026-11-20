@@ -111,6 +111,12 @@ npx eas-cli@latest env:create --name EXPO_PUBLIC_ENGINE_KEY --value "la-même-qu
 ```
 Vérifie dans `eas.json` que `EXPO_PUBLIC_ENGINE_URL` est bien l'adresse de ton moteur.
 
+### Carte sur Android : clé Google Maps
+Sur iPhone, la carte utilise Apple Plans, sans clé. Sur Android, un build EAS a besoin d'une clé Google Maps (Expo Go n'en a pas besoin) :
+1. Sur console.cloud.google.com, active « Maps SDK for Android » et crée une clé API, restreinte à l'application Android `fr.pilepoil.app` (empreinte SHA-1 donnée par `npx eas-cli@latest credentials`).
+2. Ajoute-la dans `mobile/app.json`, dans `expo.android` : `"config": { "googleMaps": { "apiKey": "ta-clé" } }`.
+La clé est visible dans l'appli : c'est normal pour cette clé-là, sa restriction à `fr.pilepoil.app` suffit à la protéger.
+
 ### Tester sur ton téléphone avant les stores (sur ta machine locale, dans `mobile/`)
 ```bash
 npx eas-cli@latest build --profile preview --platform ios       # ou android

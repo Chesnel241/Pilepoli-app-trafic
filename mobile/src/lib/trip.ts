@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isExitTip, localExit, t } from './i18n';
-import type { Journey, JourneyLeg } from './types';
+import type { Journey, JourneyLeg, LegMode } from './types';
 
 export interface Endpoints { from: string; fromName: string; to: string; toName: string }
 
@@ -70,6 +70,10 @@ export const transitLegs = (j: Journey): JourneyLeg[] => j.legs.filter((l) => l.
 /** Arrêt de guidage : un arrêt réel du trajet, avec la ligne qui y passe et ce qu'il faut y faire. */
 export interface GuideStop {
   name: string;
+  /** Mode du tronçon qui part de cet arrêt (métro, bus, tram…), pour l'animation. */
+  mode: LegMode;
+  lat?: number;
+  lon?: number;
   at: number; // ms
   color: string;
   lineCode: string;
@@ -106,6 +110,9 @@ export function guideStops(j: Journey): GuideStop[] {
       const walkLeg = last && next ? j.legs.slice(legIdx + 1, j.legs.indexOf(next)).find((l) => l.mode === 'walk') : undefined;
       out.push({
         name: s.name,
+        mode: leg.mode,
+        lat: s.lat,
+        lon: s.lon,
         at: Date.parse(s.at),
         color: leg.lineColor,
         lineCode: leg.lineCode,

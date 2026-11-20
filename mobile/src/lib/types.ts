@@ -34,7 +34,7 @@ export interface StopSnapshot {
   source: 'prim' | 'mock' | 'local' | 'offline';
 }
 
-export type LegMode = 'walk' | 'metro' | 'rer' | 'train' | 'tram' | 'bus' | 'cable' | 'other';
+export type LegMode = 'walk' | 'metro' | 'rer' | 'train' | 'tram' | 'bus' | 'cable' | 'boat' | 'other';
 
 export interface JourneyLeg {
   mode: LegMode;
@@ -48,7 +48,9 @@ export interface JourneyLeg {
   departureAt: string;
   arrivalAt: string;
   durationMin: number;
-  stops: { name: string; at: string }[];
+  stops: { name: string; at: string; lat?: number; lon?: number }[];
+  /** Tracé simplifié en [lon, lat]. */
+  path?: [number, number][];
   tips: string[];
 }
 

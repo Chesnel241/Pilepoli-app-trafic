@@ -63,11 +63,13 @@ export interface StopSnapshot {
   source: 'prim' | 'mock';
 }
 
-export type LegMode = 'walk' | 'metro' | 'rer' | 'train' | 'tram' | 'bus' | 'cable' | 'other';
+export type LegMode = 'walk' | 'metro' | 'rer' | 'train' | 'tram' | 'bus' | 'cable' | 'boat' | 'other';
 
 export interface JourneyStop {
   name: string;
   at: string; // ISO
+  lat?: number;
+  lon?: number;
 }
 
 export interface JourneyLeg {
@@ -85,6 +87,8 @@ export interface JourneyLeg {
   arrivalAt: string;
   durationMin: number;
   stops: JourneyStop[];
+  /** Tracé simplifié du tronçon, en [lon, lat] (pour la carte). */
+  path?: [number, number][];
   /** Conseils pratiques (tête de train, sortie...). */
   tips: string[];
 }
