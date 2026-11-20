@@ -104,12 +104,3 @@ export async function fetchTraffic(apiKey: string): Promise<LineTraffic[]> {
   if (!res.ok) throw Object.assign(new Error(`Info trafic : ${res.status}`), { status: res.status });
   return parseLineReports(await res.json());
 }
-
-export function mockTraffic(): LineTraffic[] {
-  return [
-    { lineId: 'mock-E', code: 'E', color: '#C04191', textColor: '#FFFFFF', mode: 'rer', level: 'perturbe',
-      disruptions: [{ id: 'm1', level: 'perturbe', title: 'Trafic perturbé entre Magenta et Nanterre', message: 'Incident technique. Trains supprimés, prévoir un temps de parcours allongé.' }] },
-    { lineId: 'mock-13', code: '13', color: '#6EC4E8', textColor: '#0E0F12', mode: 'metro', level: 'travaux',
-      disruptions: [{ id: 'm2', level: 'travaux', title: 'Travaux ce week-end', message: 'Station Varenne fermée samedi et dimanche.' }] },
-  ];
-}

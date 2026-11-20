@@ -6,11 +6,10 @@ import { History } from './store/history.ts';
 import { Stats } from './store/stats.ts';
 import { RateLimiter, TtlCache, cleanQuery, clientIp, coords, isEndpoint, isRef } from './http/guard.ts';
 import * as prim from './sources/prim.ts';
-import * as mock from './sources/mock.ts';
 import type { Departure, Journey, Place, StopSnapshot } from './types.ts';
-import { lineInfo, loadLines } from './sources/lines.ts';
-import { fetchTraffic, mockTraffic, type LineTraffic } from './sources/traffic.ts';
-import { fetchExits, mockExits, type Exit } from './sources/exits.ts';
+import { lineInfo, linesCount, loadLines } from './sources/lines.ts';
+import { fetchTraffic, type LineTraffic } from './sources/traffic.ts';
+import { fetchExits, type Exit } from './sources/exits.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const HOST = process.env.HOST ?? '0.0.0.0';
@@ -21,10 +20,25 @@ const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN?.trim() ?? '';
 const RATE_PER_MIN = Number(process.env.RATE_PER_MIN ?? 120);
 const API_KEY = process.env.PRIM_API_KEY ?? '';
-const MODE: 'prim' | 'mock' = process.env.DATA_MODE === 'prim' && API_KEY ? 'prim' : 'mock';
+const MODE = 'prim' as const;
 
-if (process.env.DATA_MODE === 'prim' && !API_KEY) {
-  console.warn('DATA_MODE=prim mais PRIM_API_KEY est vide : passage en données simulées.');
+// Pas de clé, pas de moteur : on ne sert jamais de données inventées.
+if (!API_KEY) {
+  console.error('PRIM_API_KEY manquante : ajoute ta clé PRIM dans engine/.env (voir .env.example). Arrêt.');
+  process.exit(1);
+}
+
+/** Dernier succès et dernier échec PRIM, pour /health et la supervision. */
+const primStatus = { lastOk: 0, lastError: 0, lastStatus: 0 as number | undefined, quota: false };
+function primOk() { primStatus.lastOk = Date.now(); }
+function primFail(e: unknown) {
+  primStatus.lastError = Date.now();
+  primStatus.lastStatus = (e as { status?: number })?.status;
+  primStatus.quota = primStatus.lastStatus === 429;
+}
+/** Enveloppe chaque appel PRIM pour suivre sa santé. */
+async function call<T>(p: Promise<T>): Promise<T> {
+  try { const v = await p; primOk(); return v; } catch (e) { primFail(e); throw e; }
 }
 
 const DATA_DIR = process.env.DATA_DIR ?? new URL('../data/', import.meta.url).pathname;
@@ -50,7 +64,7 @@ async function stopSnapshot(stopRef: string): Promise<StopSnapshot> {
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.snap;
 
   const now = Date.now();
-  const raw = MODE === 'prim' ? await prim.stopMonitoring(stopRef, API_KEY) : mock.mockDepartures(stopRef, now);
+  const raw = await call(prim.stopMonitoring(stopRef, API_KEY));
   const departures = raw
     .filter((d) => stillUpcoming(d, now))
     .map(withLine)
@@ -58,10 +72,7 @@ async function stopSnapshot(stopRef: string): Promise<StopSnapshot> {
       const r = rate(d, now);
       const aimed = d.aimedAt ? Date.parse(d.aimedAt) : NaN;
       const prediction = Number.isNaN(aimed) ? undefined : stats.predict(d.lineRef, stopRef, aimed);
-      if (prediction) return { ...r, prediction };
-      // Données simulées : une fausse prédiction sur une ligne, pour voir l'affichage en démo.
-      if (MODE === 'mock' && r.mode !== 'bus' && r.lineCode.length === 1) return { ...r, prediction: { typicalDelayMin: 2, badDayDelayMin: 6, samples: 40 } };
-      return r;
+      return prediction ? { ...r, prediction } : r;
     })
     .sort((a, b) => (a.minutes ?? 999) - (b.minutes ?? 999));
   stats.observe(stopRef, departures, now);
@@ -106,16 +117,14 @@ function tokenOk(req: IncomingMessage): boolean {
 let trafficCache: { at: number; lines: LineTraffic[]; error?: string } | null = null;
 async function traffic(): Promise<{ lines: LineTraffic[]; fetchedAt: string; error?: string }> {
   if (!trafficCache || Date.now() - trafficCache.at > 60_000) {
-    if (MODE === 'mock') trafficCache = { at: Date.now(), lines: mockTraffic() };
-    else {
-      try {
-        trafficCache = { at: Date.now(), lines: await fetchTraffic(API_KEY) };
-      } catch (e: any) {
-        // 401/403 : l'abonnement « Messages Info Trafic » manque sur le compte PRIM.
-        const why = e?.status === 401 || e?.status === 403 ? 'abonnement' : 'indisponible';
-        console.warn(e?.message ?? e);
-        trafficCache = { at: Date.now(), lines: trafficCache?.lines ?? [], error: why };
-      }
+    try {
+      trafficCache = { at: Date.now(), lines: await call(fetchTraffic(API_KEY)) };
+    } catch (e: any) {
+      // 401/403 : l'abonnement « Messages Info Trafic » manque sur le compte PRIM. 429 : quota du jour atteint.
+      const why = e?.status === 401 || e?.status === 403 ? 'abonnement' : e?.status === 429 ? 'quota' : 'indisponible';
+      console.warn(e?.message ?? e);
+      // On garde les dernières lignes connues, mais on dit qu'elles ne sont plus à jour.
+      trafficCache = { at: trafficCache?.at ?? Date.now(), lines: trafficCache?.lines ?? [], error: why };
     }
   }
   return { lines: trafficCache.lines, fetchedAt: new Date(trafficCache.at).toISOString(), error: trafficCache.error };
@@ -127,10 +136,7 @@ async function exits(areaNumber: string): Promise<Exit[]> {
   const hit = exitsCache.get(areaNumber);
   if (hit && Date.now() - hit.at < 24 * 3600_000) return hit.exits;
   let list: Exit[] = [];
-  if (MODE === 'mock') list = mockExits();
-  else {
-    try { list = await fetchExits(areaNumber); } catch (e: any) { console.warn('Sorties indisponibles :', e?.message ?? e); }
-  }
+  try { list = await fetchExits(areaNumber); } catch (e: any) { console.warn('Sorties indisponibles :', e?.message ?? e); }
   exitsCache.set(areaNumber, { at: Date.now(), exits: list });
   return list;
 }
@@ -143,7 +149,15 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   if (req.method !== 'GET') return send(res, 405, { error: 'Méthode non autorisée' });
   if ((req.url ?? '').length > 512) return send(res, 414, { error: 'Requête trop longue' });
 
-  if (url.pathname === '/health') return send(res, 200, { ok: true, mode: MODE, version: VERSION });
+  // GET /health : l'état du moteur et de sa source, pour la supervision (pas de donnée sensible).
+  if (url.pathname === '/health') {
+    const primUp = primStatus.lastOk >= primStatus.lastError || primStatus.lastOk === 0;
+    return send(res, 200, {
+      ok: true, mode: MODE, version: VERSION,
+      prim: { up: primUp, quotaReached: primStatus.quota, lastOk: primStatus.lastOk ? new Date(primStatus.lastOk).toISOString() : null },
+      lines: linesCount(),
+    });
+  }
 
   if (!tokenOk(req)) return send(res, 401, { error: 'Clé client absente ou invalide' });
   if (!limiter.allow(clientIp(req, TRUST_PROXY))) return send(res, 429, { error: 'Trop de requêtes, réessaie dans un instant' });
@@ -157,7 +171,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     if (!c) return send(res, 400, { error: 'lon et lat obligatoires' });
     // Arrondi à ~100 m : deux voisins partagent le même appel, et la position exacte n'est pas gardée.
     const key = `${c.lon.toFixed(3)};${c.lat.toFixed(3)}`;
-    const list = MODE === 'prim' ? await nearbyCache.wrap(key, () => prim.nearby(Number(c.lon.toFixed(3)), Number(c.lat.toFixed(3)), API_KEY)) : mock.mockNearby();
+    const list = await nearbyCache.wrap(key, () => call(prim.nearby(Number(c.lon.toFixed(3)), Number(c.lat.toFixed(3)), API_KEY)));
     // Les 5 plus proches : assez pour la carte, sans épuiser le quota (chaque arrêt est en cache 20 s).
     const top = list.slice(0, 5);
     const snaps = await Promise.all(top.map((st) => stopSnapshot(st.stopRef).catch(() => null)));
@@ -187,7 +201,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     const from = url.searchParams.get('from');
     const to = url.searchParams.get('to');
     if (!isEndpoint(from) || !isEndpoint(to)) return send(res, 400, { error: 'Paramètres from et to obligatoires' });
-    const list = MODE === 'prim' ? await journeysCache.wrap(`${from}>${to}`, () => prim.journeys(from, to, API_KEY)) : mock.mockJourneys();
+    const list = await journeysCache.wrap(`${from}>${to}`, () => call(prim.journeys(from, to, API_KEY)));
     return send(res, 200, { journeys: list, source: MODE });
   }
 
@@ -195,7 +209,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   if (url.pathname === '/places') {
     const q = cleanQuery(url.searchParams.get('q'));
     if (!q) return send(res, 200, { places: [], source: MODE });
-    const list = MODE === 'prim' ? await placesCache.wrap(q.toLowerCase(), () => prim.places(q, API_KEY)) : mock.mockPlaces(q);
+    const list = await placesCache.wrap(q.toLowerCase(), () => call(prim.places(q, API_KEY)));
     return send(res, 200, { places: list, source: MODE });
   }
 
@@ -204,16 +218,20 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 
 const server = createServer((req, res) => {
   route(req, res).catch((e) => {
-    const status = e instanceof prim.PrimError ? 502 : 500;
+    const quota = e instanceof prim.PrimError && e.status === 429;
+    const status = quota ? 503 : e instanceof prim.PrimError || e?.name === 'TimeoutError' ? 502 : 500;
     console.error(e instanceof Error ? e.message : e);
-    if (!res.headersSent) send(res, status, { error: status === 502 ? 'Source PRIM indisponible' : 'Erreur interne' });
+    if (!res.headersSent) {
+      if (quota) res.setHeader('Retry-After', '300');
+      send(res, status, { error: quota ? 'quota' : status === 502 ? 'Source PRIM indisponible' : 'Erreur interne' });
+    }
   });
 });
 server.requestTimeout = 20_000;
 server.headersTimeout = 10_000;
 server.keepAliveTimeout = 5_000;
 server.listen(PORT, HOST, () => {
-  console.log(`Moteur Pilepoil ${VERSION} prêt sur http://${HOST}:${PORT} (données : ${MODE === 'prim' ? 'PRIM' : 'simulées'})`);
+  console.log(`Moteur Pilepoil ${VERSION} prêt sur http://${HOST}:${PORT} (données : PRIM, temps réel)`);
   if (ACCESS_TOKEN) console.log('Clé client exigée (ACCESS_TOKEN)');
 });
 

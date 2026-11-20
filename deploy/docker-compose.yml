@@ -7,7 +7,6 @@ services:
     restart: unless-stopped
     env_file: ../engine/.env
     environment:
-      DATA_MODE: prim
       TRUST_PROXY: "1"
       DATA_DIR: /data
     # Uniquement accessible depuis la machine : c'est Nginx qui l'expose en HTTPS.

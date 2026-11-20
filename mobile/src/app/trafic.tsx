@@ -10,7 +10,7 @@ import { BottomNav, LineBadge } from '../components/ui';
 import { colors, fonts, radius } from '../theme';
 import type { Key } from '../lib/i18n';
 import { useI18n } from '../lib/settings';
-import { getLang, t as tr } from '../lib/i18n';
+import { getLang, localeTag, t as tr } from '../lib/i18n';
 
 type Filter = 'tout' | 'metro' | 'rer' | 'tram' | 'bus';
 const FILTERS: [Filter, Key][] = [['tout', 'traffic.all'], ['metro', 'traffic.metro'], ['rer', 'traffic.rer'], ['tram', 'traffic.tram'], ['bus', 'traffic.bus']];
@@ -64,7 +64,6 @@ export default function Trafic() {
         <Text style={s.h1}>{headline}</Text>
         <Text style={s.fresh}>
           {age === null ? '' : age < 60 ? t('traffic.updatedS', { n: age }) : t('traffic.updatedM', { n: Math.round(age / 60) })}
-          {report?.source === 'local' || report?.source === 'mock' ? t('traffic.simulated') : ''}
         </Text>
 
         {report?.error === 'abonnement' ? (
@@ -72,7 +71,7 @@ export default function Trafic() {
             <Text style={s.noticeText}>{t('traffic.subscription')}</Text>
           </View>
         ) : report?.error ? (
-          <View style={s.notice}><Text style={s.noticeText}>{report.error === 'offline' ? t('home.offline') : t('traffic.unavailable')}</Text></View>
+          <View style={s.notice}><Text style={s.noticeText}>{report.error === 'offline' ? t('home.offline') : report.error === 'quota' ? t('err.quota') : t('traffic.unavailable')}</Text></View>
         ) : null}
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filters}>
@@ -154,7 +153,7 @@ function Grid({ title, list, byCode, round = false }: {
 
 const fmt = (iso: string) => {
   const d = new Date(iso);
-  return d.toLocaleDateString(getLang() === 'en' ? 'en-GB' : 'fr-FR', { day: 'numeric', month: 'long' }) + `${getLang() === 'en' ? ',' : ' à'} ${String(d.getHours()).padStart(2, '0')}${getLang() === 'en' ? ':' : 'h'}${String(d.getMinutes()).padStart(2, '0')}`;
+  return d.toLocaleDateString(localeTag(), { day: 'numeric', month: 'long' }) + `${getLang() === 'en' ? ',' : ' à'} ${String(d.getHours()).padStart(2, '0')}${getLang() === 'en' ? ':' : 'h'}${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
 const s = StyleSheet.create({

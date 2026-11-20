@@ -7,15 +7,21 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "env": { "EXPO_PUBLIC_DEMO": "1" }
+      "environment": "development"
     },
     "preview": {
       "distribution": "internal",
-      "env": { "EXPO_PUBLIC_ENGINE_URL": "https://api.pilepoil.fr" }
+      "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_ENGINE_URL": "https://api.pilepoil.fr"
+      }
     },
     "production": {
       "autoIncrement": true,
-      "env": { "EXPO_PUBLIC_ENGINE_URL": "https://api.pilepoil.fr" }
+      "environment": "production",
+      "env": {
+        "EXPO_PUBLIC_ENGINE_URL": "https://api.pilepoil.fr"
+      }
     }
   },
   "submit": {

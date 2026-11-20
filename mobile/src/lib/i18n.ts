@@ -3,6 +3,8 @@
  * Une seule fonction, t(clé, variables), utilisable partout, y compris hors des écrans
  * (guidage vocal, notifications). La langue courante est réglée par les réglages.
  */
+import { getLocales } from 'expo-localization';
+
 export type Lang = 'fr' | 'en';
 
 const fr = {
@@ -39,7 +41,6 @@ const fr = {
   'home.offline': 'Pas de connexion pour le moment. Ton trajet en cours reste disponible.',
   'home.noNearby': 'Aucun arrêt trouvé tout près.',
   'home.settings': 'Réglages',
-  'home.simulated': 'Données simulées',
 
   // Navigation
   'nav.go': 'Aller',
@@ -73,7 +74,6 @@ const fr = {
   'choice.liveTracked': 'Suivi en direct',
   'choice.arrival': 'arrivée {time}',
   'choice.notSeenWarn': 'Dernière info disponible : aucun train suivi pour le moment. Tu peux attendre ou choisir une autre option.',
-  'choice.simulated': 'Données simulées : le moteur n’est pas encore branché sur PRIM.',
   'choice.none': 'Aucun trajet trouvé. Vérifie ta connexion ou essaie une autre adresse.',
   'choice.alternatives': 'Autres trajets possibles',
 
@@ -96,7 +96,6 @@ const fr = {
   'guide.start': 'Début du trajet',
   'guide.letsGo': 'C’est parti.',
   'guide.startA11y': 'Commencer le guidage',
-  'guide.demo': 'Démo : faire avancer le trajet',
   'guide.direction': 'Direction {dir}',
   'guide.getOffAt': 'Descends à {name}',
   'guide.now': 'Maintenant',
@@ -184,7 +183,6 @@ const fr = {
   'traffic.manyBig': '{n} grandes lignes perturbées.',
   'traffic.updatedS': 'Mis à jour il y a {n} s',
   'traffic.updatedM': 'Mis à jour il y a {n} min',
-  'traffic.simulated': ' · données simulées',
   'traffic.subscription': 'L’info trafic n’est pas encore activée : abonne-toi à l’API « Messages Info Trafic » sur ton compte PRIM, puis relance le moteur.',
   'traffic.unavailable': 'L’info trafic ne répond pas pour le moment. On réessaie toutes les minutes.',
   'traffic.all': 'Tout',
@@ -274,6 +272,12 @@ const fr = {
   'dash.allNetwork': 'Tout le réseau',
   'dash.mapTitle': 'Stations proches',
   'dash.seeStop': 'Voir {name}',
+  'dash.needLocation': 'Active ta position pour voir l’état des lignes et les stations autour de toi.',
+  'dash.openSettings': 'Ouvrir les réglages',
+
+  // Erreurs honnêtes
+  'err.quota': 'La source Île-de-France Mobilités a atteint sa limite pour aujourd’hui. Réessaie un peu plus tard.',
+  'err.unavailable': 'Île-de-France Mobilités ne répond pas pour le moment. On réessaie automatiquement.',
 } as const;
 
 export type Key = keyof typeof fr;
@@ -311,7 +315,6 @@ const en: Record<Key, string> = {
   'home.offline': 'No connection right now. Your current trip is still available.',
   'home.noNearby': 'No stop found close by.',
   'home.settings': 'Settings',
-  'home.simulated': 'Simulated data',
   'nav.go': 'Go',
   'nav.traffic': 'Traffic',
   'common.back': 'Back',
@@ -339,7 +342,6 @@ const en: Record<Key, string> = {
   'choice.liveTracked': 'Tracked live',
   'choice.arrival': 'arrives {time}',
   'choice.notSeenWarn': 'Latest info: no train tracked right now. You can wait or pick another option.',
-  'choice.simulated': 'Simulated data: the engine is not connected to PRIM yet.',
   'choice.none': 'No trip found. Check your connection or try another address.',
   'choice.alternatives': 'Other possible trips',
   'trip.reliable': 'Reliable trip',
@@ -358,7 +360,6 @@ const en: Record<Key, string> = {
   'guide.start': 'Trip start',
   'guide.letsGo': 'Here we go.',
   'guide.startA11y': 'Start guidance',
-  'guide.demo': 'Demo: move the trip forward',
   'guide.direction': 'Towards {dir}',
   'guide.getOffAt': 'Get off at {name}',
   'guide.now': 'Now',
@@ -437,7 +438,6 @@ const en: Record<Key, string> = {
   'traffic.manyBig': '{n} major lines disrupted.',
   'traffic.updatedS': 'Updated {n} s ago',
   'traffic.updatedM': 'Updated {n} min ago',
-  'traffic.simulated': ' · simulated data',
   'traffic.subscription': 'Traffic info is not enabled yet: subscribe to the “Messages Info Trafic” API on your PRIM account, then restart the engine.',
   'traffic.unavailable': 'Traffic info is not responding right now. We retry every minute.',
   'traffic.all': 'All',
@@ -515,6 +515,10 @@ const en: Record<Key, string> = {
   'dash.allNetwork': 'Whole network',
   'dash.mapTitle': 'Nearby stations',
   'dash.seeStop': 'See {name}',
+  'dash.needLocation': 'Turn on location to see line status and stations around you.',
+  'dash.openSettings': 'Open settings',
+  'err.quota': 'The Île-de-France Mobilités source has reached its limit for today. Try again a bit later.',
+  'err.unavailable': 'Île-de-France Mobilités isn’t responding right now. We retry automatically.',
 };
 
 const dicts: Record<Lang, Record<Key, string>> = { fr, en };
@@ -523,15 +527,37 @@ let current: Lang = 'fr';
 export const setLang = (l: Lang) => { current = l; };
 export const getLang = (): Lang => current;
 
-/** Langue du téléphone, sans dépendance native : Intl est fourni par le moteur JS. */
+/**
+ * Langue du système, choisie intelligemment : on parcourt les langues préférées du téléphone
+ * dans l'ordre (un Espagnol qui lit aussi le français aura le français), et sinon l'anglais,
+ * la langue la plus partagée par les visiteurs. Sur iOS et Android 13+, la langue choisie
+ * pour l'appli seule dans les réglages du téléphone est respectée aussi.
+ */
 export function deviceLang(): Lang {
   try {
-    const loc = Intl.DateTimeFormat().resolvedOptions().locale ?? 'fr';
-    return loc.toLowerCase().startsWith('fr') ? 'fr' : loc.toLowerCase().startsWith('en') ? 'en' : 'fr';
+    for (const l of getLocales()) {
+      const code = l.languageCode?.toLowerCase();
+      if (code === 'fr' || code === 'en') return code;
+    }
   } catch {
-    return 'fr';
+    /* module natif absent : on retombe sur l'anglais */
   }
+  return 'en';
 }
+
+/** Variante régionale à utiliser pour les dates et la voix (fr-BE, en-US…), cohérente avec la langue de l'appli. */
+export function localeTag(lang: Lang = current): string {
+  try {
+    const match = getLocales().find((l) => l.languageCode?.toLowerCase() === lang);
+    if (match?.languageTag) return match.languageTag;
+  } catch {
+    /* ignore */
+  }
+  return lang === 'fr' ? 'fr-FR' : 'en-GB';
+}
+
+/** Dès le chargement, avant même la lecture des réglages : la langue du téléphone. */
+current = deviceLang();
 
 export function t(key: Key, vars?: Record<string, string | number | undefined>): string {
   let s = dicts[current][key] ?? fr[key] ?? key;

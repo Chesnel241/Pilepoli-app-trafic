@@ -7,8 +7,9 @@ import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect, router } from 'expo-router';
 import { guideStops, hhmm, transitLegs, trip } from '../lib/trip';
-import { computeGuide, nextDemoInstant } from '../lib/guide';
-import { ALLOW_LOCAL, fetchJourneys, fetchTraffic, useOnline } from '../lib/api';
+import { computeGuide } from '../lib/guide';
+import { localeTag } from '../lib/i18n';
+import { fetchJourneys, fetchTraffic, useOnline } from '../lib/api';
 import { LEVEL, modeKey } from '../lib/lines';
 import { cancelTrip, notifyNow, scheduleTrip } from '../lib/notify';
 import { useI18n, useSettings } from '../lib/settings';
@@ -30,7 +31,6 @@ export default function EnRoute() {
   const online = useOnline();
   const [j, setJ] = useState<Journey | null>(trip.current());
   const stops = useMemo(() => (j ? guideStops(j) : []), [j, lang]);
-  const [offset, setOffset] = useState(0); // décalage d'horloge pour la démo
   const [tick, setTick] = useState(Date.now());
   const leaving = useRef(false);
   const [boarding, setBoarding] = useState(true);
@@ -81,13 +81,13 @@ export default function EnRoute() {
     return () => { alive = false; sub?.remove(); };
   }, []);
 
-  const now = tick + offset;
+  const now = tick;
   const state = computeGuide(stops, now);
   const previousPhase = useRef(state.phase);
 
   const speak = useCallback((text: string) => {
     Speech.stop().catch(() => null);
-    Speech.speak(text, { language: lang === 'en' ? 'en-GB' : 'fr-FR', rate: 0.95 });
+    Speech.speak(text, { language: localeTag(lang), rate: 0.95 });
   }, [lang]);
 
   useEffect(() => {
@@ -124,7 +124,7 @@ export default function EnRoute() {
     const check = async () => {
       const report = await fetchTraffic();
       if (!alive || report.error) return;
-      const nowMs = Date.now() + offset;
+      const nowMs = Date.now();
       const ahead = transitLegs(j).filter((l) => Date.parse(l.arrivalAt) > nowMs);
       const hit = report.lines.find((tl) => (tl.level === 'perturbe' || tl.level === 'interrompu')
         && !shown.current.has(`${tl.lineId}:${tl.level}`)
@@ -140,7 +140,7 @@ export default function EnRoute() {
     check();
     const id = setInterval(check, 60_000);
     return () => { alive = false; clearInterval(id); };
-  }, [j, offset]);
+  }, [j]);
 
   const keep = () => {
     setAlert(null);
@@ -164,7 +164,6 @@ export default function EnRoute() {
   const switchTo = (next: Journey) => {
     trip.replace(next);
     leaving.current = false;
-    setOffset(0);
     setJ(next);
     setAlert(null);
     setAlts(null);
@@ -186,10 +185,6 @@ export default function EnRoute() {
     router.back();
   };
 
-  const demo = () => {
-    const nxt = nextDemoInstant(stops, now);
-    if (nxt) setOffset(nxt - Date.now());
-  };
 
   const c = state.card;
   const canReroute = !!trip.endpoints();
@@ -197,8 +192,7 @@ export default function EnRoute() {
   const toName = ends?.toName || j.legs[j.legs.length - 1]?.to || t('g.destination');
   // Le mode en cours : celui du tronçon où l'on est (marche pendant une correspondance).
   const curMode = state.phase === 'walking' ? 'walk' : stops[Math.min(state.at, stops.length - 1)]?.mode ?? 'metro';
-  // En démo, l'horloge est décalée : la position GPS réelle ne correspond plus, on suit les horaires.
-  const liveFix = offset === 0 ? fix : null;
+  const liveFix = fix;
   const here = route ? whereAmI(route, now, liveFix) : null;
   const card = (
     <RouteCard journey={j} route={route} stops={stops} now={now} fix={liveFix} mode={curMode}
@@ -295,11 +289,6 @@ export default function EnRoute() {
         <View style={s.guideArea}>
           {card}
           <GuideView state={state} stops={stops} voiceOn={voiceOn} onVoice={toggleVoice} />
-          {ALLOW_LOCAL ? (
-            <Pressable onPress={demo} style={s.demo} accessibilityRole="button">
-              <Text style={s.demoText}>{t('guide.demo')}</Text>
-            </Pressable>
-          ) : null}
         </View>
       ) : (
         <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
@@ -322,11 +311,6 @@ export default function EnRoute() {
 
           <TrainTrack stops={stops} state={state} now={now} />
 
-          {ALLOW_LOCAL ? (
-            <Pressable onPress={demo} style={s.demo} accessibilityRole="button">
-              <Text style={s.demoText}>{t('guide.demo')}</Text>
-            </Pressable>
-          ) : null}
         </ScrollView>
       )}
     </SafeAreaView>
@@ -379,6 +363,4 @@ const s = StyleSheet.create({
   alt: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 12, gap: 8 },
   altLines: { flexDirection: 'row', gap: 6 },
   altTime: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
-  demo: { alignSelf: 'center', height: 42, paddingHorizontal: 18, borderRadius: 999, borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#C9C9D3', justifyContent: 'center' },
-  demoText: { fontFamily: fonts.semi, fontSize: 14, color: colors.muted },
 });

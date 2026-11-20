@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState } from 'react-native';
 import { deviceLang, setLang, t, tn, type Lang } from './i18n';
 
 /** Réglages d'accessibilité et de confort, gardés sur le téléphone uniquement. */
@@ -41,6 +42,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => apply(DEFAULTS))
       .finally(() => setReady(true));
+  }, []);
+
+  // Retour au premier plan : la langue du téléphone a pu changer entre-temps (réglages système).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st !== 'active' || snapshot.lang !== 'auto') return;
+      apply(snapshot);
+      setSettings({ ...snapshot });
+    });
+    return () => sub.remove();
   }, []);
 
   const update = useCallback((patch: Partial<Settings>) => {

@@ -1,17 +1,24 @@
 import { useEffect, useState } from 'react';
-import { localDepartures, localJourneys, localTraffic } from './mock';
 import type { Exit, Journey, NearbyStop, Place, StopSnapshot, TrafficReport } from './types';
 
 /**
- * Client du moteur Pilepoil.
- * En développement (ou démo), si le moteur est injoignable, on bascule sur des données simulées,
- * et l'interface l'indique (source = 'local'). En production, jamais de fausses données :
- * on dit simplement qu'on est hors connexion. On ne cache jamais d'où vient l'info.
+ * Client du moteur Pilepoil. Uniquement des données réelles (PRIM, Île-de-France Mobilités).
+ * Si le moteur est injoignable ou que la source ne répond pas, on le dit clairement :
+ * jamais de données inventées pour remplir l'écran.
  */
 const ENGINE = (process.env.EXPO_PUBLIC_ENGINE_URL ?? 'http://localhost:8787').replace(/\/+$/, '');
 /** Clé anti-abus facultative (même valeur que ACCESS_TOKEN côté moteur). */
 const ENGINE_KEY = process.env.EXPO_PUBLIC_ENGINE_KEY ?? '';
-export const ALLOW_LOCAL = __DEV__ || process.env.EXPO_PUBLIC_DEMO === '1';
+if (!__DEV__ && /localhost|127\.0\.0\.1/.test(ENGINE)) {
+  console.error('EXPO_PUBLIC_ENGINE_URL pointe vers localhost dans un build de production : vérifie eas.json.');
+}
+
+/** Pourquoi une réponse est vide : pas de réseau, source indisponible, ou quota PRIM du jour atteint. */
+export type Failure = 'offline' | 'unavailable' | 'quota';
+class EngineError extends Error {
+  constructor(readonly failure: Failure) { super(failure); }
+}
+const failureOf = (e: unknown): Failure => (e instanceof EngineError ? e.failure : 'offline');
 
 /** État de la connexion au moteur, partagé par tous les écrans. */
 let online = true;
@@ -40,11 +47,14 @@ async function get<T>(path: string): Promise<T> {
       headers: ENGINE_KEY ? { 'x-pilepoil-key': ENGINE_KEY } : undefined,
     });
     setOnline(true);
-    if (!res.ok) throw new Error(`Moteur : ${res.status}`);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new EngineError(res.status === 503 && body?.error === 'quota' ? 'quota' : 'unavailable');
+    }
     return (await res.json()) as T;
   } catch (e) {
     // Une erreur HTTP (4xx/5xx) n'est pas une coupure réseau ; un abandon ou un échec de fetch, si.
-    if (!(e instanceof Error && e.message.startsWith('Moteur'))) setOnline(false);
+    if (!(e instanceof EngineError)) setOnline(false);
     throw e;
   } finally {
     clearTimeout(timer);
@@ -54,17 +64,16 @@ async function get<T>(path: string): Promise<T> {
 export async function fetchDepartures(stopRef: string): Promise<StopSnapshot> {
   try {
     return await get<StopSnapshot>(`/stops/${encodeURIComponent(stopRef)}/departures`);
-  } catch {
-    if (ALLOW_LOCAL) return localDepartures(stopRef);
-    return { stopRef, fetchedAt: new Date().toISOString(), departures: [], anomalies: [], source: 'offline' };
+  } catch (e) {
+    return { stopRef, fetchedAt: new Date().toISOString(), departures: [], anomalies: [], source: 'offline', failure: failureOf(e) };
   }
 }
 
-export async function fetchJourneys(from: string, to: string): Promise<{ journeys: Journey[]; source: string }> {
+export async function fetchJourneys(from: string, to: string): Promise<{ journeys: Journey[]; source: string; failure?: Failure }> {
   try {
     return await get(`/journeys?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
-  } catch {
-    return ALLOW_LOCAL ? { journeys: localJourneys(), source: 'local' } : { journeys: [], source: 'offline' };
+  } catch (e) {
+    return { journeys: [], source: 'offline', failure: failureOf(e) };
   }
 }
 
@@ -80,9 +89,8 @@ export async function searchPlaces(q: string): Promise<Place[]> {
 export async function fetchTraffic(): Promise<TrafficReport> {
   try {
     return await get<TrafficReport>('/traffic');
-  } catch {
-    if (ALLOW_LOCAL) return { lines: localTraffic(), fetchedAt: new Date().toISOString(), source: 'local' };
-    return { lines: [], fetchedAt: new Date().toISOString(), source: 'offline', error: 'offline' };
+  } catch (e) {
+    return { lines: [], fetchedAt: new Date().toISOString(), source: 'offline', error: failureOf(e) };
   }
 }
 

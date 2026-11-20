@@ -19,19 +19,22 @@ Il faut Node.js 22 ou plus récent.
 ```bash
 cd engine
 npm install
-cp .env.example .env      # puis remplis PRIM_API_KEY et passe DATA_MODE=prim quand tu as la clé
+cp .env.example .env      # puis remplis PRIM_API_KEY (obligatoire)
 npm run dev               # http://localhost:8787
 npm test                  # tests du moteur
 ```
 
-Sans clé PRIM, le moteur tourne avec des **données simulées** (le scénario de la maquette).
+Le moteur ne sert que des données réelles PRIM : sans clé, il refuse de démarrer.
 
 Routes disponibles :
 
-- `GET /health`
-- `GET /stops/:stopRef/departures` (exemple de stopRef : `STIF:StopArea:SP:XXXXX:`)
+- `GET /health` (état du moteur, de PRIM et du référentiel des lignes)
+- `GET /stops/:stopRef/departures` (exemple de stopRef : `STIF:StopArea:SP:71410:`)
+- `GET /stops/:zone/exits` (sorties d'une gare)
+- `GET /nearby?lon=...&lat=...` (stations proches et leurs passages)
 - `GET /journeys?from=...&to=...` (from et to : identifiant Navitia ou `longitude;latitude`)
 - `GET /places?q=...`
+- `GET /traffic` (info trafic de toutes les lignes)
 
 ### 2. L'app
 
@@ -43,7 +46,7 @@ npx expo start            # scanne le QR code avec Expo Go sur ton téléphone
 ```
 
 Sur un vrai téléphone, `localhost` ne marche pas : mets l'IP locale de ton ordinateur dans `EXPO_PUBLIC_ENGINE_URL` (par exemple `http://192.168.1.20:8787`).
-Si le moteur ne répond pas, l'app bascule seule sur des données locales et l'indique à l'écran.
+Si le moteur ne répond pas, l'app le dit (« pas de connexion ») et garde le trajet en cours : elle n'invente jamais de données.
 
 ## Obtenir la clé PRIM
 
@@ -68,6 +71,7 @@ Le moteur apprend des passages réels (`engine/src/store/stats.ts`) : pour chaqu
 
 ## Mise en production
 
+- Brancher et vérifier les vraies données, pas à pas : `deploy/TEMPS-REEL.md`.
 - Moteur sur un VPS : voir `deploy/LISEZ-MOI.md` (Docker, Nginx, HTTPS, sécurité).
 - Appli sur les stores : même fichier, partie « Stores » (EAS Build).
 - Confidentialité : `PRIVACY.md` (à publier, son adresse sert de lien dans les stores).

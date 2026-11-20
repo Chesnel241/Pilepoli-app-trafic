@@ -119,11 +119,3 @@ export function computeGuide(stops: GuideStop[], now: number): GuideState {
     },
   };
 }
-
-/** Démo : instants clés du trajet, pour avancer d'étape en étape. */
-export function nextDemoInstant(stops: GuideStop[], now: number): number | null {
-  const moments = stops
-    .flatMap((s, i) => (i === 0 || s.walkAfter ? [s.at - 20_000, s.at + 5000, s.at + DWELL_MS + 1000] : [s.at - 20_000, s.at + DWELL_MS + 1000]))
-    .sort((a, b) => a - b);
-  return moments.find((m) => m > now + 1000) ?? null;
-}

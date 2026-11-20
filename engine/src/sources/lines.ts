@@ -50,6 +50,9 @@ export function buildLines(rows: Record<string, unknown>[]): Map<string, LineInf
 /** STIF:Line::C01375: → C01375 */
 export const lineIdOf = (lineRef: string) => lineRef.split(':').filter(Boolean).pop() ?? lineRef;
 
+/** Nombre de lignes connues (0 si le référentiel n'a pas pu être chargé). */
+export const linesCount = () => lines.size;
+
 export function lineInfo(lineRef: string): LineInfo | undefined {
   return lines.get(lineIdOf(lineRef));
 }

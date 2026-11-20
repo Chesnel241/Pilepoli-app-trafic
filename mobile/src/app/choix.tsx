@@ -17,7 +17,7 @@ const RANK = { direct: 0, estime: 1, theorique: 2, pas_vu: 3, supprime: 4 } as c
 export default function Choix() {
   const { from, to, toName, fromName } = useLocalSearchParams<{ from: string; to: string; toName: string; fromName?: string }>();
   const [list, setList] = useState<Journey[] | null>(null);
-  const [source, setSource] = useState('');
+  const [failure, setFailure] = useState<string | undefined>();
   const { t, tn } = useI18n();
 
   useEffect(() => {
@@ -26,7 +26,7 @@ export default function Choix() {
       const sorted = [...r.journeys].sort((a, b) => RANK[a.reliability] - RANK[b.reliability] || a.durationMin - b.durationMin);
       trip.setOptions(sorted);
       setList(sorted);
-      setSource(r.source);
+      setFailure(r.failure);
       // Un seul trajet possible : pas de choix à faire, on passe directement au détail.
       if (sorted.length === 1) open(sorted[0].id, true);
     });
@@ -47,7 +47,9 @@ export default function Choix() {
         </View>
 
         {!list ? <ActivityIndicator color={colors.violet} style={{ marginTop: 40 }} /> : null}
-        {list && list.length === 0 ? <Text style={s.warnPlain}>{t('choice.none')}</Text> : null}
+        {list && list.length === 0 ? (
+          <Text style={s.warnPlain}>{failure === 'quota' ? t('err.quota') : failure === 'unavailable' ? t('err.unavailable') : failure === 'offline' ? t('home.offline') : t('choice.none')}</Text>
+        ) : null}
 
         {list?.map((j, i) => {
           const best = i === 0;
@@ -82,9 +84,7 @@ export default function Choix() {
           );
         })}
 
-        {source === 'local' || source === 'mock' ? (
-          <Text style={s.note}>{t('choice.simulated')}</Text>
-        ) : null}
+
       </ScrollView>
     </SafeAreaView>
   );

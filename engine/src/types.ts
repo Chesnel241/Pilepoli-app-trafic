@@ -60,7 +60,7 @@ export interface StopSnapshot {
   fetchedAt: string;
   departures: RatedDeparture[];
   anomalies: Anomaly[];
-  source: 'prim' | 'mock';
+  source: 'prim';
 }
 
 export type LegMode = 'walk' | 'metro' | 'rer' | 'train' | 'tram' | 'bus' | 'cable' | 'boat' | 'other';

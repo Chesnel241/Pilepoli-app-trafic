@@ -31,7 +31,9 @@ export interface StopSnapshot {
   fetchedAt: string;
   departures: RatedDeparture[];
   anomalies?: Anomaly[];
-  source: 'prim' | 'mock' | 'local' | 'offline';
+  source: 'prim' | 'offline';
+  /** Pourquoi c'est vide, quand c'est le cas. */
+  failure?: 'offline' | 'unavailable' | 'quota';
 }
 
 export type LegMode = 'walk' | 'metro' | 'rer' | 'train' | 'tram' | 'bus' | 'cable' | 'boat' | 'other';

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, TextInput, type TextInputHandle } from '../components/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect, router } from 'expo-router';
 import * as Location from 'expo-location';
-import { ALLOW_LOCAL, fetchDepartures, fetchNearby, fetchTraffic, searchPlaces, useOnline } from '../lib/api';
+import { fetchNearby, fetchTraffic, searchPlaces, useOnline } from '../lib/api';
 import { loadFavorites, saveFavorite, type FavKind, type Favorites } from '../lib/favorites';
 import { depLabel, predictionLabel } from '../lib/labels';
 import { getSettings, useI18n, useSettings } from '../lib/settings';
@@ -16,9 +16,6 @@ import { NearbyMap } from '../components/NearbyMap';
 import { BottomNav, LineBadge, Logo, StatusChip } from '../components/ui';
 import { IconChevron, IconHome, IconPin, IconSearch, IconWork } from '../components/icons';
 import { colors, fonts, radius } from '../theme';
-
-/** Arrêt de démonstration, utilisé seulement en développement quand la position n'est pas disponible. */
-const DEMO_STOP = process.env.EXPO_PUBLIC_DEMO_STOP ?? 'STIF:StopArea:SP:DEMO:';
 
 const LINE_COLORS: Record<string, string> = { A: '#E3051C', B: '#3C91DC', C: '#FFCE00', D: '#00814F', E: '#C04191' };
 
@@ -32,7 +29,6 @@ export default function Home() {
   const [q, setQ] = useState('');
   const [results, setResults] = useState<Place[]>([]);
   const [searching, setSearching] = useState(false);
-  const [departures, setDepartures] = useState<RatedDeparture[]>([]);
   const [nearby, setNearby] = useState<NearbyStop[] | null>(null);
   const [report, setReport] = useState<TrafficReport | null>(null);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
@@ -57,11 +53,20 @@ export default function Home() {
     trip.stored().then(setResume);
   }, []);
 
+  // Au retour dans l'appli (après avoir autorisé la position dans les réglages, ou après un déplacement),
+  // on relit la position.
+  const [locTick, setLocTick] = useState(0);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') setLocTick((x) => x + 1); });
+    return () => sub.remove();
+  }, []);
+
   // Départ = position actuelle, sans rien demander d'autre au voyageur.
   useEffect(() => {
     if (!getSettings().onboarded) return;
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
+      // On ne redemande l'autorisation qu'au premier affichage ; ensuite on regarde seulement si elle a été donnée.
+      const { status } = locTick === 0 ? await Location.requestForegroundPermissionsAsync() : await Location.getForegroundPermissionsAsync();
       if (status !== 'granted') return setLocState('denied');
       const last = await Location.getLastKnownPositionAsync().catch(() => null);
       if (last) {
@@ -74,27 +79,17 @@ export default function Home() {
       setCoords({ lon: pos.coords.longitude, lat: pos.coords.latitude });
       setLocState('ok');
     })().catch(() => setLocState((s) => (s === 'ok' ? s : 'denied')));
-  }, [settings.onboarded]);
+  }, [settings.onboarded, locTick]);
 
-  // Prochains passages rafraîchis toutes les 30 s : arrêts proches si on a la position.
+  // Arrêts proches et leurs prochains passages, rafraîchis toutes les 30 s (seulement si on a la position).
   useEffect(() => {
+    if (!coords) return;
     let alive = true;
     const load = async () => {
-      if (coords) {
-        const stops = await fetchNearby(coords.lon, coords.lat);
-        if (!alive) return;
-        if (stops) {
-          setNearby(stops.filter((s) => s.departures.length > 0));
-          setFetchedAt(Date.now());
-          return;
-        }
-      }
-      if (!ALLOW_LOCAL) return; // en production, pas de passages inventés
-      const snap = await fetchDepartures(DEMO_STOP);
-      if (!alive) return;
-      setNearby(null);
-      setDepartures(snap.departures.slice(0, 3));
-      setFetchedAt(Date.parse(snap.fetchedAt));
+      const stops = await fetchNearby(coords.lon, coords.lat);
+      if (!alive || !stops) return; // moteur injoignable : on garde le dernier relevé, le bandeau hors ligne le dit
+      setNearby(stops.filter((s) => s.departures.length > 0));
+      setFetchedAt(Date.now());
     };
     load();
     const id = setInterval(load, 30_000);
@@ -140,7 +135,7 @@ export default function Home() {
     const next = [{ id: toId, name: toName }, ...recent.filter((item) => item.id !== toId)].slice(0, 3);
     setRecent(next);
     AsyncStorage.setItem('pilepoil_recent_destinations', JSON.stringify(next)).catch(() => null);
-    const fromId = customFrom?.id ?? from ?? (ALLOW_LOCAL ? 'mock:gare-du-nord' : '');
+    const fromId = customFrom?.id ?? from ?? '';
     if (!fromId) { setEditingFrom(true); return; }
     trip.setEndpoints({ from: fromId, fromName: customFrom?.name ?? '', to: toId, toName });
     router.push({ pathname: '/choix', params: { from: fromId, fromName: customFrom?.name ?? '', to: toId, toName } });
@@ -208,8 +203,6 @@ export default function Home() {
     );
   };
 
-  // Sans position (démo), le tableau de bord se base sur l'arrêt de démonstration.
-  const dashStops: NearbyStop[] | null = nearby ?? (departures.length ? [{ stopRef: DEMO_STOP, placeId: '', areaNumber: '', name: '', distance: 0, departures }] : null);
 
   const freshness = fetchedAt ? Math.max(0, Math.round((Date.now() - fetchedAt) / 1000)) : null;
   const favTile = (kind: FavKind, bg: string, fg: string, icon: ReactNode, label: string) => {
@@ -255,7 +248,16 @@ export default function Home() {
         {!online ? <View style={s.offline}><Text style={s.offlineText}>{t('home.offline')}</Text></View> : null}
 
         {/* D'abord l'état du trafic autour de toi : c'est ce qu'on vient chercher le plus souvent. */}
-        <NetworkDashboard nearby={dashStops} report={report} />
+        {locState === 'denied' ? (
+          <View style={s.needLoc}>
+            <Text style={s.needLocText}>{t('dash.needLocation')}</Text>
+            <Pressable onPress={() => Linking.openSettings()} style={s.needLocBtn} accessibilityRole="button">
+              <Text style={s.needLocBtnText}>{t('dash.openSettings')}</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <NetworkDashboard nearby={nearby} report={report} />
+        )}
 
         <Text style={s.h1} accessibilityRole="header">{t('home.where')}</Text>
 
@@ -378,7 +380,7 @@ export default function Home() {
               {stop.departures.slice(0, 3).map(row)}
             </View>
           );
-        }) : departures.map(row)}
+        }) : null}
       </ScrollView>
       <BottomNav active="aller" />
     </SafeAreaView>
@@ -397,6 +399,10 @@ const s = StyleSheet.create({
   resume: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.ink, borderRadius: radius.md, padding: 16 },
   resumeTitle: { fontFamily: fonts.display, fontSize: 19, color: colors.lime },
   resumeSub: { fontFamily: fonts.semi, fontSize: 14, color: '#FFFFFF' },
+  needLoc: { backgroundColor: colors.ink, borderRadius: radius.lg, padding: 16, gap: 12 },
+  needLocText: { fontFamily: fonts.semi, fontSize: 16, lineHeight: 22, color: '#FFFFFF' },
+  needLocBtn: { alignSelf: 'flex-start', backgroundColor: colors.lime, borderRadius: radius.pill, paddingVertical: 10, paddingHorizontal: 16 },
+  needLocBtnText: { fontFamily: fonts.black, fontSize: 14, color: colors.ink },
   offline: { backgroundColor: colors.amberBg, borderRadius: radius.md, padding: 12 },
   offlineText: { fontFamily: fonts.semi, fontSize: 14, lineHeight: 19, color: colors.amberInk },
   fromRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: -8 },

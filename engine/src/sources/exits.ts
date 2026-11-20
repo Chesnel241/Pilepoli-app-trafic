@@ -90,11 +90,3 @@ export async function fetchExits(stopAreaNumber: string): Promise<Exit[]> {
     .filter((e): e is Exit => !!e)
     .sort((a, b) => (Number(a.number ?? 999) - Number(b.number ?? 999)) || a.name.localeCompare(b.name, 'fr'));
 }
-
-export function mockExits(): Exit[] {
-  return [
-    { id: 'x1', name: 'Sortie 1 · Rue de Dunkerque', number: '1' },
-    { id: 'x2', name: 'Sortie 3 · Grande Arche, parvis', number: '3' },
-    { id: 'x3', name: 'Sortie 5 · Ascenseur, Cours Valmy', number: '5', accessible: true },
-  ];
-}

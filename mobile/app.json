@@ -9,13 +9,34 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "fr.pilepoil.app",
-      "buildNumber": "1",
       "config": {
         "usesNonExemptEncryption": false
       },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Pilepoil utilise ta position pour trouver les arrêts proches, remplir ton point de départ et te guider pendant le trajet.",
         "CFBundleAllowMixedLocalizations": true
+      },
+      "privacyManifests": {
+        "NSPrivacyTracking": false,
+        "NSPrivacyTrackingDomains": [],
+        "NSPrivacyCollectedDataTypes": [
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypePreciseLocation",
+            "NSPrivacyCollectedDataTypeLinked": false,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": [
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+            ]
+          }
+        ],
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": [
+              "CA92.1"
+            ]
+          }
+        ]
       }
     },
     "android": {
@@ -27,7 +48,6 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "fr.pilepoil.app",
-      "versionCode": 1,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
@@ -64,7 +84,23 @@
       [
         "expo-notifications",
         {
-          "color": "#5B3DF5"
+          "color": "#5B3DF5",
+          "icon": "./assets/android-icon-monochrome.png"
+        }
+      ],
+      [
+        "expo-localization",
+        {
+          "supportedLocales": {
+            "ios": [
+              "fr",
+              "en"
+            ],
+            "android": [
+              "fr",
+              "en"
+            ]
+          }
         }
       ]
     ],

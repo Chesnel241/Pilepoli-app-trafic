@@ -33,7 +33,7 @@ cd /opt/pilepoil/deploy
 docker compose up -d --build
 docker compose logs -f engine
 ```
-Tu dois voir `Moteur Pilepoil 0.3.0 prêt` et `données : PRIM`. Test local : `curl http://127.0.0.1:8787/health`.
+Tu dois voir `Moteur Pilepoil 0.3.0 prêt` et `données : PRIM, temps réel`. Sans clé, le moteur s'arrête tout de suite avec un message clair. Test local : `curl http://127.0.0.1:8787/health`.
 
 ### Nginx et HTTPS (sur le serveur distant)
 ```bash
@@ -112,17 +112,21 @@ npx eas-cli@latest env:create --name EXPO_PUBLIC_ENGINE_KEY --value "la-même-qu
 Vérifie dans `eas.json` que `EXPO_PUBLIC_ENGINE_URL` est bien l'adresse de ton moteur.
 
 ### Carte sur Android : clé Google Maps
-Sur iPhone, la carte utilise Apple Plans, sans clé. Sur Android, un build EAS a besoin d'une clé Google Maps (Expo Go n'en a pas besoin) :
-1. Sur console.cloud.google.com, active « Maps SDK for Android » et crée une clé API, restreinte à l'application Android `fr.pilepoil.app` (empreinte SHA-1 donnée par `npx eas-cli@latest credentials`).
-2. Ajoute-la dans `mobile/app.json`, dans `expo.android` : `"config": { "googleMaps": { "apiKey": "ta-clé" } }`.
-La clé est visible dans l'appli : c'est normal pour cette clé-là, sa restriction à `fr.pilepoil.app` suffit à la protéger.
+Sur iPhone, la carte utilise Apple Plans, sans clé. Sur Android, un build EAS a besoin d'une clé Google Maps :
+1. Sur console.cloud.google.com : crée un projet, active « Maps SDK for Android », crée une clé API.
+2. Restreins la clé à l'application Android `fr.pilepoil.app` avec son empreinte SHA-1 (affichée par `npx eas-cli@latest credentials`, plateforme Android).
+3. Donne-la à EAS (sur ta machine locale, dans `mobile/`), elle ne va jamais dans le dépôt :
+```bash
+npx eas-cli@latest env:create --name GOOGLE_MAPS_ANDROID_KEY --value "ta-clé" --environment preview --environment production --visibility sensitive
+```
+`app.config.ts` la lit au moment du build.
 
 ### Tester sur ton téléphone avant les stores (sur ta machine locale, dans `mobile/`)
 ```bash
 npx eas-cli@latest build --profile preview --platform ios       # ou android
 ```
 EAS te guide pour les certificats Apple (laisse-le les gérer). Le lien d'installation arrive à la fin.
-C'est la vraie appli : notifications, voix et position marchent comme en production, sans données simulées.
+C'est la vraie appli : notifications, voix, carte et position marchent comme en production.
 
 ### Publier (sur ta machine locale, dans `mobile/`)
 ```bash
@@ -136,11 +140,12 @@ npx eas-cli@latest submit --platform android
 - **Apple, « Confidentialité de l'app »** : Localisation (précise et approximative), utilisée pour les fonctionnalités de l'app, **non liée** à l'identité, **pas** de suivi. Rien d'autre n'est collecté.
 - **Google, « Sécurité des données »** : Position approximative et précise, traitée de façon éphémère, non partagée, pour les fonctionnalités de l'app. Données chiffrées en transit (HTTPS).
 - **Catégorie** : Navigation (ou Voyages).
-- **Captures** : prends-les sur le build preview.
+- **Captures** : prends-les sur le build preview, en vrai trajet (voir `deploy/TEMPS-REEL.md`, étape 7).
+- **Note pour la vérification Apple et Google** : les testeurs sont souvent aux États-Unis. Écris dans la note de vérification : « L'appli couvre l'Île-de-France. Hors de la région, “Autour de toi” est vide : touchez “Modifier” pour choisir “Gare du Nord” comme départ, puis cherchez “La Défense” pour voir un trajet, et ouvrez l'onglet Trafic. Aucun compte n'est nécessaire. »
 
 ### Avant d'appuyer sur « Envoyer »
 - [ ] Crochets complétés dans `PRIVACY.md` et dans l'écran Confidentialité (`mobile/src/app/confidentialite.tsx`).
-- [ ] `https://api.pilepoil.fr/health` répond `"mode":"prim"`.
+- [ ] `https://api.pilepoil.fr/health` répond `"prim":{"up":true…}` et `"lines"` supérieur à 0.
 - [ ] Un trajet réel fait de bout en bout avec le build preview (notifications reçues écran verrouillé).
 - [ ] Test en mode avion pendant un trajet : le guidage continue sur les horaires prévus.
 - [ ] Test en « Très grand » texte et en anglais.
