@@ -63,3 +63,8 @@ export const IconEscalator = ({ size = 22, color = colors.ink }: P) => (
     <Path d="M16 4l4 3-4 3" />
   </Svg>
 );
+export const IconChevron = ({ size = 18, color = colors.muted }: P) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M9 6l6 6-6 6" />
+  </Svg>
+);

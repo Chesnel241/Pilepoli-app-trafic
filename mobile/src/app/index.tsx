@@ -7,7 +7,7 @@ import * as Location from 'expo-location';
 import { fetchDepartures, searchPlaces } from '../lib/api';
 import type { Place, RatedDeparture } from '../lib/types';
 import { LineBadge, Logo, StatusChip } from '../components/ui';
-import { IconHome, IconPin, IconSearch, IconWork } from '../components/icons';
+import { IconChevron, IconHome, IconPin, IconSearch, IconWork } from '../components/icons';
 import { colors, fonts, radius } from '../theme';
 
 /** Arrêt affiché dans « Autour de toi » en attendant la recherche de l'arrêt le plus proche (v2). */
@@ -83,6 +83,16 @@ export default function Home() {
     setCustomFrom(place);
     setEditingFrom(false);
     setFromQ('');
+  };
+
+  // Un passage « Autour de toi » se touche : on part vers son terminus.
+  const [opening, setOpening] = useState<string | null>(null);
+  const goToTerminus = async (d: RatedDeparture) => {
+    setOpening(d.journeyRef);
+    const [place] = await searchPlaces(d.destination);
+    setOpening(null);
+    if (place) go(place.id, place.name);
+    else { setQ(d.destination); }
   };
 
   const go = (toId: string, toName: string) => {
@@ -202,7 +212,13 @@ export default function Home() {
           <View style={s.freshness}><View style={s.freshDot} /><Text style={s.muted}>{freshness === null ? 'Actualisation…' : `à jour, ${freshness}s`}</Text></View>
         </View>
         {departures.map((d) => (
-          <View key={d.journeyRef} style={s.dep}>
+          <Pressable
+            key={d.journeyRef}
+            onPress={() => goToTerminus(d)}
+            style={({ pressed }) => [s.dep, pressed && { opacity: 0.6 }]}
+            accessibilityRole="button"
+            accessibilityLabel={`Aller vers ${d.destination} avec la ligne ${d.lineCode}`}
+          >
             <LineBadge
               code={d.lineCode}
               color={d.lineColor ?? LINE_COLORS[d.lineCode] ?? '#FF7A1A'}
@@ -218,7 +234,8 @@ export default function Home() {
               {d.minutes === null || d.reliability === 'pas_vu' ? '?' : d.minutes}
               {d.minutes !== null && d.reliability !== 'pas_vu' ? <Text style={s.depUnit}> min</Text> : null}
             </Text>
-          </View>
+            {opening === d.journeyRef ? <ActivityIndicator color={colors.violet} /> : <IconChevron />}
+          </Pressable>
         ))}
       </ScrollView>
     </SafeAreaView>
