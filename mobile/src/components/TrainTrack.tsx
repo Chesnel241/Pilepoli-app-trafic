@@ -1,52 +1,66 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import type { GuideStop } from '../lib/trip';
 import type { GuideState } from '../lib/guide';
 import { hhmm } from '../lib/trip';
 import { colors, fonts } from '../theme';
 
-export function TrainTrack({ stops, state }: { stops: GuideStop[]; state: GuideState; now: number }) {
+/**
+ * Le fil du trajet, discret : les arrêts passés sont barrés,
+ * le prochain « respire » doucement, les suivants s'estompent avec la distance.
+ */
+export function TrainTrack({ stops, state, now }: { stops: GuideStop[]; state: GuideState; now: number }) {
+  const moving = state.phase === 'moving' || state.phase === 'walking';
+  const nextIdx = state.phase === 'arrived' ? -1 : moving ? state.at + 1 : state.at;
+
   return (
     <View style={s.track} accessibilityLabel="Progression du trajet">
       {stops.map((stop, i) => {
-        const moving = state.phase === 'moving' || state.phase === 'walking';
-        const passed = i < state.at || (i === state.at && moving) || state.phase === 'arrived';
-        const current = i === state.at && (state.phase === 'at' || state.phase === 'before');
+        const passed = state.phase === 'arrived' ? i < stops.length - 1 : i < state.at || (i === state.at && moving);
+        const isNext = i === nextIdx;
         const last = i === stops.length - 1;
+        const ahead = i - nextIdx; // 0 = prochain, 1 = celui d'après…
+        const mins = Math.round((stop.at - now) / 60_000);
 
         return (
           <View key={`${stop.name}-${i}`} style={s.row}>
             <View style={s.rail}>
-              <View style={[
-                s.node,
-                passed && { backgroundColor: stop.color, borderColor: stop.color },
-                current && { backgroundColor: colors.ink, borderColor: colors.ink },
-                last && { backgroundColor: colors.lime, borderColor: colors.lime },
-              ]}>
-                {passed ? <View style={s.nodeDot} /> : null}
-              </View>
-              {!last ? (
+              {isNext ? (
+                <PulseNode color={stop.color} />
+              ) : (
                 <View style={[
-                  s.line,
-                  passed ? { backgroundColor: stop.color } : { backgroundColor: colors.line },
+                  s.node,
+                  passed && { backgroundColor: colors.line, borderColor: colors.line },
+                  !passed && { borderColor: stop.color },
+                  last && !passed && { backgroundColor: colors.lime, borderColor: colors.ink },
                 ]} />
+              )}
+              {!last ? (
+                stop.walkAfter ? (
+                  <View style={s.walkDots}>{[0, 1, 2, 3].map((k) => <View key={k} style={[s.walkDot, passed && { backgroundColor: colors.line }]} />)}</View>
+                ) : (
+                  <View style={[s.line, { backgroundColor: passed ? colors.line : stop.color }]} />
+                )
               ) : null}
             </View>
 
             <View style={[s.info, !last && s.infoWithLine]}>
-              <View style={s.copy}>
-                <Text style={[s.name, passed && s.passedName]} numberOfLines={1}>{stop.name}</Text>
-                {current ? <Text style={s.now}>Tu y es</Text> : null}
-              </View>
-              <Text style={s.time}>{hhmm(new Date(stop.at).toISOString())}</Text>
-              {i === state.signIdx && stop.tags.length ? (
-                <View style={s.tags}>
-                  {stop.tags.map((tag) => (
-                    <View key={tag} style={[s.tag, tag.startsWith('Sortie') && s.exitTag]}>
-                      <Text style={[s.tagText, tag.startsWith('Sortie') && s.exitTagText]}>{tag}</Text>
-                    </View>
-                  ))}
+              {isNext ? (
+                <NextStop stop={stop} mins={mins} current={!moving} />
+              ) : (
+                <View style={s.plain}>
+                  <Text
+                    style={[
+                      s.name,
+                      passed ? s.passedName : { fontSize: ahead === 1 ? 17 : 16, opacity: ahead > 2 ? 0.75 : 1 },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {stop.name}
+                  </Text>
+                  <Text style={[s.time, passed && s.passedTime]}>{hhmm(new Date(stop.at).toISOString())}</Text>
                 </View>
-              ) : null}
+              )}
             </View>
           </View>
         );
@@ -55,33 +69,76 @@ export function TrainTrack({ stops, state }: { stops: GuideStop[]; state: GuideS
   );
 }
 
+/** Le prochain arrêt : un léger zoom qui respire, en continu. */
+function NextStop({ stop, mins, current }: { stop: GuideStop; mins: number; current: boolean }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(scale, { toValue: 1.04, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      Animated.timing(scale, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [scale]);
+  return (
+    <Animated.View style={[s.next, { transform: [{ scale }] }]}>
+      <View style={s.nextHead}>
+        <Text style={s.nextName} numberOfLines={2}>{stop.name}</Text>
+        <Text style={s.nextEta}>{current ? 'Tu y es' : mins <= 0 ? 'maintenant' : `${mins} min`}</Text>
+      </View>
+      {stop.tags.length ? (
+        <View style={s.tags}>
+          {stop.tags.map((tag) => (
+            <View key={tag} style={[s.tag, tag.startsWith('Sortie') && s.exitTag]}>
+              <Text style={[s.tagText, tag.startsWith('Sortie') && s.exitTagText]}>{tag}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </Animated.View>
+  );
+}
+
+function PulseNode({ color }: { color: string }) {
+  const v = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(Animated.timing(v, { toValue: 1, duration: 1600, easing: Easing.out(Easing.quad), useNativeDriver: true }));
+    loop.start();
+    return () => loop.stop();
+  }, [v]);
+  return (
+    <View style={s.pulseWrap}>
+      <Animated.View style={[s.pulseHalo, { backgroundColor: color, opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0] }), transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [1, 2.2] }) }] }]} />
+      <View style={[s.pulseDot, { backgroundColor: color }]} />
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   track: { paddingTop: 4 },
-  row: { flexDirection: 'row', minHeight: 52 },
+  row: { flexDirection: 'row', minHeight: 48 },
   rail: { width: 28, alignItems: 'center' },
-  node: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: colors.bg,
-    borderWidth: 3,
-    borderColor: colors.muted,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
-  },
-  nodeDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#FFFFFF' },
+  node: { width: 14, height: 14, borderRadius: 7, backgroundColor: colors.bg, borderWidth: 3, borderColor: colors.muted, marginTop: 3, zIndex: 2 },
+  pulseWrap: { width: 20, height: 20, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
+  pulseHalo: { position: 'absolute', width: 18, height: 18, borderRadius: 9 },
+  pulseDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 4, borderColor: '#FFFFFF' },
   line: { width: 3, flex: 1, marginVertical: 3, borderRadius: 2 },
-  info: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, paddingBottom: 12 },
-  infoWithLine: { minHeight: 52 },
-  copy: { flex: 1 },
-  name: { fontFamily: fonts.semi, fontSize: 16, color: colors.ink },
-  passedName: { color: colors.faded },
-  now: { fontFamily: fonts.bold, fontSize: 12, color: colors.violet, marginTop: 2 },
+  walkDots: { flex: 1, justifyContent: 'space-evenly', paddingVertical: 4 },
+  walkDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.muted },
+  info: { flex: 1, paddingBottom: 12, paddingLeft: 4 },
+  infoWithLine: { minHeight: 48 },
+  plain: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  name: { flex: 1, fontFamily: fonts.semi, fontSize: 16, color: colors.ink },
+  passedName: { fontFamily: fonts.medium, fontSize: 14, color: colors.faded, textDecorationLine: 'line-through' },
   time: { fontFamily: fonts.semi, fontSize: 14, color: colors.muted },
-  tags: { position: 'absolute', left: 0, right: 0, top: 24, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  tag: { backgroundColor: colors.soft, borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 },
-  tagText: { fontFamily: fonts.bold, fontSize: 12, color: colors.ink },
-  exitTag: { backgroundColor: colors.ink },
-  exitTagText: { color: colors.lime },
+  passedTime: { color: colors.faded, fontSize: 13 },
+  next: { backgroundColor: colors.ink, borderRadius: 18, padding: 14, gap: 8, marginTop: -6, marginBottom: 4 },
+  nextHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
+  nextName: { flex: 1, fontFamily: fonts.display, fontSize: 21, lineHeight: 23, color: '#FFFFFF' },
+  nextEta: { fontFamily: fonts.display, fontSize: 21, color: colors.lime },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  tag: { backgroundColor: '#2A2C33', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 },
+  tagText: { fontFamily: fonts.bold, fontSize: 12, color: '#FFFFFF' },
+  exitTag: { backgroundColor: colors.lime },
+  exitTagText: { color: colors.ink },
 });

@@ -1,4 +1,4 @@
-import type { Journey, StopSnapshot } from './types';
+import type { Journey, LineTraffic, StopSnapshot } from './types';
 
 /**
  * Données de secours quand le moteur ne répond pas (même scénario que la maquette).
@@ -19,7 +19,7 @@ export function localJourneys(now = Date.now()): Journey[] {
           stops: [{ name: 'Gare du Nord', at: t(now, 3) }, { name: 'Châtelet-Les Halles', at: t(now, 7) }], tips: ['Monte en tête de train'] },
         { mode: 'walk', lineCode: '', lineColor: '#0E0F12', lineTextColor: '#FFFFFF', direction: '', from: 'Châtelet-Les Halles', to: 'Châtelet-Les Halles',
           departureAt: t(now, 7), arrivalAt: t(now, 11), durationMin: 4, stops: [], tips: ['Suis le A rouge'] },
-        { mode: 'rer', lineCode: 'A', lineColor: '#E3051C', lineTextColor: '#FFFFFF', direction: 'Ouest', from: 'Châtelet-Les Halles', to: 'La Défense',
+        { mode: 'rer', lineCode: 'A', lineColor: '#E3051C', lineTextColor: '#FFFFFF', direction: 'Ouest', from: 'Châtelet-Les Halles', to: 'La Défense', toId: 'stop_area:IDFM:mock-la-defense',
           departureAt: t(now, 11), arrivalAt: t(now, 24), durationMin: 13,
           stops: [
             { name: 'Châtelet-Les Halles', at: t(now, 11) }, { name: 'Auber', at: t(now, 14) },
@@ -50,4 +50,11 @@ export function localDepartures(stopRef: string): StopSnapshot {
       { journeyRef: 'l3', lineCode: '302', destination: 'Stains', aimedAt: null, expectedAt: null, reliability: 'pas_vu', ageSeconds: 720, minutes: null, range: null, label: 'Pas vu depuis 12 min' },
     ],
   };
+}
+
+export function localTraffic(): LineTraffic[] {
+  return [
+    { lineId: 'l-E', code: 'E', color: '#C04191', textColor: '#FFFFFF', mode: 'rer', level: 'perturbe',
+      disruptions: [{ id: 'l1', level: 'perturbe', title: 'Trafic perturbé entre Magenta et Nanterre', message: 'Incident technique. Prévoir un temps de parcours allongé.' }] },
+  ];
 }

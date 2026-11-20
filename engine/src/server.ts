@@ -6,6 +6,8 @@ import * as prim from './sources/prim.ts';
 import * as mock from './sources/mock.ts';
 import type { Departure, StopSnapshot } from './types.ts';
 import { lineInfo, loadLines } from './sources/lines.ts';
+import { fetchTraffic, mockTraffic, type LineTraffic } from './sources/traffic.ts';
+import { fetchExits, mockExits, type Exit } from './sources/exits.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const API_KEY = process.env.PRIM_API_KEY ?? '';
@@ -59,6 +61,39 @@ function send(res: ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body));
 }
 
+/** Info trafic : un seul appel PRIM par minute, partagé entre tous les utilisateurs. */
+let trafficCache: { at: number; lines: LineTraffic[]; error?: string } | null = null;
+async function traffic(): Promise<{ lines: LineTraffic[]; fetchedAt: string; error?: string }> {
+  if (!trafficCache || Date.now() - trafficCache.at > 60_000) {
+    if (MODE === 'mock') trafficCache = { at: Date.now(), lines: mockTraffic() };
+    else {
+      try {
+        trafficCache = { at: Date.now(), lines: await fetchTraffic(API_KEY) };
+      } catch (e: any) {
+        // 401/403 : l'abonnement « Messages Info Trafic » manque sur le compte PRIM.
+        const why = e?.status === 401 || e?.status === 403 ? 'abonnement' : 'indisponible';
+        console.warn(e?.message ?? e);
+        trafficCache = { at: Date.now(), lines: trafficCache?.lines ?? [], error: why };
+      }
+    }
+  }
+  return { lines: trafficCache.lines, fetchedAt: new Date(trafficCache.at).toISOString(), error: trafficCache.error };
+}
+
+/** Sorties : elles changent rarement, on les garde 24 h par gare. */
+const exitsCache = new Map<string, { at: number; exits: Exit[] }>();
+async function exits(areaNumber: string): Promise<Exit[]> {
+  const hit = exitsCache.get(areaNumber);
+  if (hit && Date.now() - hit.at < 24 * 3600_000) return hit.exits;
+  let list: Exit[] = [];
+  if (MODE === 'mock') list = mockExits();
+  else {
+    try { list = await fetchExits(areaNumber); } catch (e: any) { console.warn('Sorties indisponibles :', e?.message ?? e); }
+  }
+  exitsCache.set(areaNumber, { at: Date.now(), exits: list });
+  return list;
+}
+
 async function route(req: IncomingMessage, res: ServerResponse) {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
   const parts = url.pathname.split('/').filter(Boolean);
@@ -67,6 +102,28 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   if (req.method !== 'GET') return send(res, 405, { error: 'Méthode non autorisée' });
 
   if (url.pathname === '/health') return send(res, 200, { ok: true, mode: MODE });
+
+  // GET /traffic : état de toutes les lignes et perturbations en cours
+  if (url.pathname === '/traffic') return send(res, 200, await traffic());
+
+  // GET /nearby?lon=..&lat=.. : arrêts autour de soi, avec leurs prochains passages
+  if (url.pathname === '/nearby') {
+    const lon = Number(url.searchParams.get('lon')), lat = Number(url.searchParams.get('lat'));
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return send(res, 400, { error: 'lon et lat obligatoires' });
+    const list = MODE === 'prim' ? await prim.nearby(lon, lat, API_KEY) : mock.mockNearby();
+    const top = list.slice(0, 3);
+    const snaps = await Promise.all(top.map((st) => stopSnapshot(st.stopRef).catch(() => null)));
+    return send(res, 200, {
+      stops: top.map((st, i) => ({ ...st, departures: snaps[i]?.departures.slice(0, 4) ?? [] })),
+      source: MODE,
+    });
+  }
+
+  // GET /stops/:areaNumber/exits : sorties d'une gare (ex. /stops/71410/exits)
+  if (parts[0] === 'stops' && parts[2] === 'exits' && parts[1]) {
+    const n = decodeURIComponent(parts[1]).split(':').filter(Boolean).pop() ?? '';
+    return send(res, 200, { exits: await exits(n), source: MODE });
+  }
 
   // GET /stops/:stopRef/departures   ex. /stops/STIF:StopArea:SP:71410:/departures
   if (parts[0] === 'stops' && parts[2] === 'departures' && parts[1]) {

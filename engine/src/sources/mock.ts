@@ -44,7 +44,7 @@ export function mockJourneys(now: number = Date.now()): Journey[] {
           tips: ['Monte en tête de train'] },
         { mode: 'walk', lineCode: '', lineColor: '#0E0F12', lineTextColor: '#FFFFFF', direction: '', from: 'Châtelet-Les Halles', to: 'Châtelet-Les Halles',
           departureAt: t(7), arrivalAt: t(11), durationMin: 4, stops: [], tips: ['Suis le A rouge'] },
-        { mode: 'rer', lineCode: 'A', lineColor: '#E3051C', lineTextColor: '#FFFFFF', direction: 'Ouest', from: 'Châtelet-Les Halles', to: 'La Défense',
+        { mode: 'rer', lineCode: 'A', lineColor: '#E3051C', lineTextColor: '#FFFFFF', direction: 'Ouest', from: 'Châtelet-Les Halles', to: 'La Défense', toId: 'stop_area:IDFM:mock-la-defense',
           departureAt: t(11), arrivalAt: t(24), durationMin: 13,
           stops: [
             { name: 'Châtelet-Les Halles', at: t(11) }, { name: 'Auber', at: t(14) },
@@ -76,4 +76,11 @@ export function mockPlaces(q: string): Place[] {
   ];
   const s = q.trim().toLowerCase();
   return s ? all.filter((p) => p.name.toLowerCase().includes(s)) : all;
+}
+
+export function mockNearby() {
+  return [
+    { stopRef: 'STIF:StopArea:SP:mock-gdn:', placeId: 'mock:gare-du-nord', areaNumber: 'mock-gdn', name: 'Gare du Nord', distance: 140 },
+    { stopRef: 'STIF:StopArea:SP:mock-laf:', placeId: 'mock:lafayette', areaNumber: 'mock-laf', name: 'Lafayette', distance: 320 },
+  ];
 }

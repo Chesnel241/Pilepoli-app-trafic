@@ -36,6 +36,7 @@ export interface JourneyLeg {
   direction: string;
   from: string;
   to: string;
+  toId?: string;
   departureAt: string;
   arrivalAt: string;
   durationMin: number;
@@ -58,4 +59,49 @@ export interface Place {
   id: string;
   name: string;
   kind: string;
+}
+
+export type TrafficLevel = 'ok' | 'info' | 'travaux' | 'perturbe' | 'interrompu';
+
+export interface Disruption {
+  id: string;
+  level: TrafficLevel;
+  title: string;
+  message: string;
+  start?: string;
+  end?: string;
+}
+
+export interface LineTraffic {
+  lineId: string;
+  code: string;
+  color: string;
+  textColor: string;
+  mode: string;
+  level: TrafficLevel;
+  disruptions: Disruption[];
+}
+
+export interface TrafficReport {
+  lines: LineTraffic[];
+  fetchedAt: string;
+  /** « abonnement » : l'API Messages Info Trafic n'est pas activée sur le compte PRIM. */
+  error?: string;
+  source?: string;
+}
+
+export interface NearbyStop {
+  stopRef: string;
+  placeId: string;
+  areaNumber: string;
+  name: string;
+  distance: number;
+  departures: RatedDeparture[];
+}
+
+export interface Exit {
+  id: string;
+  name: string;
+  number?: string;
+  accessible?: boolean;
 }

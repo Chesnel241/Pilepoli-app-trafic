@@ -4,9 +4,9 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
-import { fetchDepartures, searchPlaces } from '../lib/api';
-import type { Place, RatedDeparture } from '../lib/types';
-import { LineBadge, Logo, StatusChip } from '../components/ui';
+import { fetchDepartures, fetchNearby, searchPlaces } from '../lib/api';
+import type { NearbyStop, Place, RatedDeparture } from '../lib/types';
+import { BottomNav, LineBadge, Logo, StatusChip } from '../components/ui';
 import { IconChevron, IconHome, IconPin, IconSearch, IconWork } from '../components/icons';
 import { colors, fonts, radius } from '../theme';
 
@@ -22,6 +22,9 @@ export default function Home() {
   const [results, setResults] = useState<Place[]>([]);
   const [searching, setSearching] = useState(false);
   const [departures, setDepartures] = useState<RatedDeparture[]>([]);
+  // Arrêts réels autour de la position (null = pas encore, ou moteur injoignable).
+  const [nearby, setNearby] = useState<NearbyStop[] | null>(null);
+  const [coords, setCoords] = useState<{ lon: number; lat: number } | null>(null);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
   const [recent, setRecent] = useState<{ id: string; name: string }[]>([]);
   // Départ modifiable : par défaut la position, sinon un lieu choisi.
@@ -43,23 +46,34 @@ export default function Home() {
       if (status !== 'granted') return setLocState('denied');
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       setFrom(`${pos.coords.longitude};${pos.coords.latitude}`);
+      setCoords({ lon: pos.coords.longitude, lat: pos.coords.latitude });
       setLocState('ok');
     })().catch(() => setLocState('denied'));
   }, []);
 
-  // Prochains passages rafraîchis toutes les 30 s.
+  // Prochains passages rafraîchis toutes les 30 s : arrêts proches si on a la position, sinon l'arrêt de démo.
   useEffect(() => {
     let alive = true;
     const load = async () => {
+      if (coords) {
+        const stops = await fetchNearby(coords.lon, coords.lat);
+        if (!alive) return;
+        if (stops && stops.length) {
+          setNearby(stops);
+          setFetchedAt(Date.now());
+          return;
+        }
+      }
       const snap = await fetchDepartures(DEMO_STOP);
       if (!alive) return;
+      setNearby(null);
       setDepartures(snap.departures.slice(0, 3));
       setFetchedAt(Date.parse(snap.fetchedAt));
     };
     load();
     const id = setInterval(load, 30_000);
     return () => { alive = false; clearInterval(id); };
-  }, []);
+  }, [coords]);
 
   // Recherche de destination pendant la frappe.
   useEffect(() => {
@@ -104,6 +118,33 @@ export default function Home() {
       params: { from: customFrom?.id ?? from ?? 'mock:gare-du-nord', fromName: customFrom?.name ?? '', to: toId, toName },
     });
   };
+
+  const row = (d: RatedDeparture) => (
+    <Pressable
+      key={d.journeyRef}
+      onPress={() => goToTerminus(d)}
+      style={({ pressed }) => [s.dep, pressed && { opacity: 0.6 }]}
+      accessibilityRole="button"
+      accessibilityLabel={`Aller vers ${d.destination} avec la ligne ${d.lineCode}`}
+    >
+      <LineBadge
+        code={d.lineCode}
+        color={d.lineColor ?? LINE_COLORS[d.lineCode] ?? '#FF7A1A'}
+        textColor={d.lineTextColor ?? (LINE_COLORS[d.lineCode] ? '#FFFFFF' : colors.ink)}
+        round={d.mode === 'metro'}
+      />
+      <View style={{ flex: 1, gap: 4 }}>
+        <Text style={s.depDest} numberOfLines={1}>{d.destination}</Text>
+        {/* Le libellé vient du moteur : il dit l'âge de l'info, jamais plus que ce qu'on sait. */}
+        <StatusChip reliability={d.reliability} label={d.label} />
+      </View>
+      <Text style={[s.depMin, d.reliability === 'pas_vu' && { color: colors.redInk }]}>
+        {d.minutes === null || d.reliability === 'pas_vu' ? '?' : d.minutes}
+        {d.minutes !== null && d.reliability !== 'pas_vu' ? <Text style={s.depUnit}> min</Text> : null}
+      </Text>
+      {opening === d.journeyRef ? <ActivityIndicator color={colors.violet} /> : <IconChevron />}
+    </Pressable>
+  );
 
   const freshness = fetchedAt ? Math.max(0, Math.round((Date.now() - fetchedAt) / 1000)) : null;
   const hour = new Date().getHours();
@@ -211,40 +252,30 @@ export default function Home() {
           <Text style={s.h2}>Autour de toi</Text>
           <View style={s.freshness}><View style={s.freshDot} /><Text style={s.muted}>{freshness === null ? 'Actualisation…' : `à jour, ${freshness}s`}</Text></View>
         </View>
-        {departures.map((d) => (
-          <Pressable
-            key={d.journeyRef}
-            onPress={() => goToTerminus(d)}
-            style={({ pressed }) => [s.dep, pressed && { opacity: 0.6 }]}
-            accessibilityRole="button"
-            accessibilityLabel={`Aller vers ${d.destination} avec la ligne ${d.lineCode}`}
-          >
-            <LineBadge
-              code={d.lineCode}
-              color={d.lineColor ?? LINE_COLORS[d.lineCode] ?? '#FF7A1A'}
-              textColor={d.lineTextColor ?? (LINE_COLORS[d.lineCode] ? '#FFFFFF' : colors.ink)}
-              round={d.mode === 'metro'}
-            />
-            <View style={{ flex: 1, gap: 4 }}>
-              <Text style={s.depDest} numberOfLines={1}>{d.destination}</Text>
-              {/* Le libellé vient du moteur : il dit l'âge de l'info, jamais plus que ce qu'on sait. */}
-              <StatusChip reliability={d.reliability} label={d.label} />
-            </View>
-            <Text style={[s.depMin, d.reliability === 'pas_vu' && { color: colors.redInk }]}>
-              {d.minutes === null || d.reliability === 'pas_vu' ? '?' : d.minutes}
-              {d.minutes !== null && d.reliability !== 'pas_vu' ? <Text style={s.depUnit}> min</Text> : null}
-            </Text>
-            {opening === d.journeyRef ? <ActivityIndicator color={colors.violet} /> : <IconChevron />}
-          </Pressable>
-        ))}
+        {nearby ? nearby.map((stop) => (
+          <View key={stop.stopRef} style={{ gap: 2 }}>
+            <Pressable
+              style={s.stopHead}
+              onPress={() => router.push({ pathname: '/arret', params: { ref: stop.stopRef, area: stop.areaNumber, name: stop.name } })}
+              accessibilityRole="button"
+              accessibilityLabel={`Voir l'arrêt ${stop.name}`}
+            >
+              <Text style={s.stopName} numberOfLines={1}>{stop.name}</Text>
+              <Text style={s.stopDist}>{walkLabel(stop.distance)}</Text>
+              <IconChevron />
+            </Pressable>
+            {stop.departures.slice(0, 3).map(row)}
+          </View>
+        )) : departures.map(row)}
       </ScrollView>
+      <BottomNav active="aller" />
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 32, gap: 16 },
+  content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 120, gap: 16 },
   header: { height: 44, justifyContent: 'center' },
   h1: { fontFamily: fonts.display, fontSize: 38, lineHeight: 40, color: colors.ink, letterSpacing: -1 },
   h2: { fontFamily: fonts.bold, fontSize: 18, color: colors.ink },
@@ -268,7 +299,13 @@ const s = StyleSheet.create({
   depDest: { fontFamily: fonts.semi, fontSize: 16, color: colors.ink },
   depMin: { fontFamily: fonts.display, fontSize: 26, color: colors.ink },
   depUnit: { fontFamily: fonts.semi, fontSize: 15 },
+  stopHead: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 10, paddingBottom: 2 },
+  stopName: { flex: 1, fontFamily: fonts.bold, fontSize: 14, color: colors.muted, letterSpacing: 0.3 },
+  stopDist: { fontFamily: fonts.semi, fontSize: 13, color: colors.muted },
   recent: { flexDirection: 'row', gap: 10 },
   recentItem: { flex: 1, height: 52, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.soft, borderRadius: 16, paddingHorizontal: 14 },
   recentText: { flex: 1, fontFamily: fonts.semi, fontSize: 15, color: colors.ink },
 });
+
+/** ~80 m par minute à pied, arrondi à la minute. */
+const walkLabel = (m: number) => `${Math.max(1, Math.round(m / 80))} min à pied`;

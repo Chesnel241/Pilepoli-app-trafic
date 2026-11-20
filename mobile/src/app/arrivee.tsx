@@ -1,8 +1,10 @@
-import { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { trip } from '../lib/trip';
+import { fetchExits } from '../lib/api';
+import type { Exit } from '../lib/types';
 import { BigButton } from '../components/ui';
 import { IconArrowLeft, IconEscalator } from '../components/icons';
 import { colors, fonts } from '../theme';
@@ -14,6 +16,13 @@ export default function Arrivee() {
   const exitTip = lastLeg?.tips.find((t) => t.startsWith('Sortie'));
   const [exitLabel, exitPlace] = exitTip ? exitTip.split(',').map((x) => x.trim()) : [null, null];
   const exitNum = exitLabel?.replace('Sortie', '').trim();
+
+  // Les vraies sorties de la gare (données IDFM). On ne prétend pas savoir laquelle est la meilleure
+  // si le calcul d'itinéraire ne l'a pas dit : on les liste, simplement.
+  const [exits, setExits] = useState<Exit[]>([]);
+  useEffect(() => {
+    if (lastLeg?.toId) fetchExits(lastLeg.toId).then(setExits);
+  }, [lastLeg?.toId]);
 
   const bob = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -54,8 +63,20 @@ export default function Arrivee() {
           <View style={s.stepIcon}><IconEscalator /></View>
           <Text style={s.stepText}>Escalator, puis la sortie</Text>
         </View>
-        <View style={{ flex: 1 }} />
-        <Text style={s.note}>Les numéros de sortie viendront des données des gares (v0.2).</Text>
+        {exits.length > 0 ? (
+          <View style={{ flex: 1, gap: 8 }}>
+            <Text style={s.h2}>{exitNum ? 'Toutes les sorties' : 'Les sorties de la gare'}</Text>
+            <ScrollView contentContainerStyle={{ gap: 8 }} showsVerticalScrollIndicator={false}>
+              {exits.map((e) => (
+                <View key={e.id} style={[s.exit, e.number && e.number === exitNum && s.exitOn]}>
+                  <View style={s.exitChip}><Text style={s.exitChipText}>{e.number ?? '•'}</Text></View>
+                  <Text style={s.exitName} numberOfLines={2}>{e.name}</Text>
+                  {e.accessible ? <Text accessibilityLabel="Accessible fauteuil">♿</Text> : null}
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        ) : <View style={{ flex: 1 }} />}
         <BigButton label="Terminer" tone="ink" onPress={() => router.dismissAll()} />
       </SafeAreaView>
     </View>
@@ -77,5 +98,11 @@ const s = StyleSheet.create({
   step: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   stepIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.soft, alignItems: 'center', justifyContent: 'center' },
   stepText: { fontFamily: fonts.bold, fontSize: 18, color: colors.ink, flex: 1 },
+  h2: { fontFamily: fonts.bold, fontSize: 16, color: colors.muted },
+  exit: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.soft, borderRadius: 14, padding: 10 },
+  exitOn: { backgroundColor: colors.lime },
+  exitChip: { minWidth: 32, height: 32, borderRadius: 9, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  exitChipText: { fontFamily: fonts.display, fontSize: 16, color: colors.lime },
+  exitName: { flex: 1, fontFamily: fonts.semi, fontSize: 15, color: colors.ink },
   note: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted, textAlign: 'center' },
 });

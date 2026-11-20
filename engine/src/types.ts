@@ -77,6 +77,8 @@ export interface JourneyLeg {
   direction: string;
   from: string;
   to: string;
+  /** Identifiant Navitia de la zone d'arrivée (stop_area:IDFM:71410), pour retrouver ses sorties. */
+  toId?: string;
   departureAt: string;
   arrivalAt: string;
   durationMin: number;

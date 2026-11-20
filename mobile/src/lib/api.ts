@@ -1,5 +1,5 @@
-import { localDepartures, localJourneys } from './mock';
-import type { Journey, Place, StopSnapshot } from './types';
+import { localDepartures, localJourneys, localTraffic } from './mock';
+import type { Exit, Journey, NearbyStop, Place, StopSnapshot, TrafficReport } from './types';
 
 /**
  * Client du moteur Pilepoil.
@@ -40,6 +40,33 @@ export async function searchPlaces(q: string): Promise<Place[]> {
   try {
     const r = await get<{ places: Place[] }>(`/places?q=${encodeURIComponent(q)}`);
     return r.places;
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchTraffic(): Promise<TrafficReport> {
+  try {
+    return await get<TrafficReport>('/traffic');
+  } catch {
+    return { lines: localTraffic(), fetchedAt: new Date().toISOString(), source: 'local' };
+  }
+}
+
+/** Arrêts autour d'une position. null si le moteur ne répond pas (l'accueil se rabat alors sur l'arrêt de démo). */
+export async function fetchNearby(lon: number, lat: number): Promise<NearbyStop[] | null> {
+  try {
+    const r = await get<{ stops: NearbyStop[] }>(`/nearby?lon=${lon}&lat=${lat}`);
+    return r.stops;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchExits(areaNumber: string): Promise<Exit[]> {
+  try {
+    const r = await get<{ exits: Exit[] }>(`/stops/${encodeURIComponent(areaNumber)}/exits`);
+    return r.exits;
   } catch {
     return [];
   }

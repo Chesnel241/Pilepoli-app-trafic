@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { router } from 'expo-router';
 import { Animated, Easing, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { colors, fonts, radius, reliabilityStyle, type Reliability } from '../theme';
 import { Wordmark } from './Wordmark';
@@ -96,4 +97,39 @@ const styles = StyleSheet.create({
   big: { height: 64, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   bigText: { fontFamily: fonts.display, fontSize: 22 },
   icon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+});
+
+/** Barre de navigation flottante, deux onglets seulement : partir, et l'état du trafic. */
+export function BottomNav({ active }: { active: 'aller' | 'trafic' }) {
+  const item = (key: 'aller' | 'trafic', label: string, href: '/' | '/trafic') => {
+    const on = active === key;
+    return (
+      <Pressable
+        key={key}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: on }}
+        onPress={() => { if (!on) router.replace(href); }}
+        style={[navStyles.item, on && navStyles.itemOn]}
+      >
+        <Text style={[navStyles.text, on && navStyles.textOn]}>{label}</Text>
+      </Pressable>
+    );
+  };
+  return (
+    <View pointerEvents="box-none" style={navStyles.wrap}>
+      <View style={navStyles.bar} accessibilityRole="tablist">
+        {item('aller', 'Aller', '/')}
+        {item('trafic', 'Trafic', '/trafic')}
+      </View>
+    </View>
+  );
+}
+
+const navStyles = StyleSheet.create({
+  wrap: { position: 'absolute', left: 0, right: 0, bottom: 24, alignItems: 'center' },
+  bar: { flexDirection: 'row', gap: 4, backgroundColor: colors.ink, borderRadius: radius.pill, padding: 6 },
+  item: { height: 46, paddingHorizontal: 22, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  itemOn: { backgroundColor: colors.lime },
+  text: { fontFamily: fonts.bold, fontSize: 16, color: '#FFFFFF' },
+  textOn: { color: colors.ink },
 });

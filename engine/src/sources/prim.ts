@@ -107,6 +107,7 @@ export function parseJourneys(json: any): Journey[] {
           direction: di.direction ?? '',
           from: s.from?.name ?? '',
           to: s.to?.name ?? '',
+          toId: s.to?.stop_point?.stop_area?.id ?? (s.to?.embedded_type === 'stop_area' ? s.to?.id : undefined),
           departureAt: navitiaDate(s.departure_date_time),
           arrivalAt: navitiaDate(s.arrival_date_time),
           durationMin: Math.round((s.duration ?? 0) / 60),
@@ -138,4 +139,37 @@ export async function journeys(from: string, to: string, apiKey: string): Promis
 export async function places(q: string, apiKey: string): Promise<Place[]> {
   const json = await get('/v2/navitia/places', { q, count: 8 }, apiKey);
   return (json?.places ?? []).map((p: any) => ({ id: p.id, name: p.name, kind: p.embedded_type }));
+}
+
+/* ---------- Arrêts proches (Navitia places_nearby) ---------- */
+
+export interface NearbyStop {
+  /** Référence SIRI pour les prochains passages (STIF:StopArea:SP:71410:). */
+  stopRef: string;
+  /** Identifiant Navitia (stop_area:IDFM:71410), utile pour les itinéraires. */
+  placeId: string;
+  /** Numéro de la zone (71410), utile pour les sorties. */
+  areaNumber: string;
+  name: string;
+  distance: number;
+}
+
+/** stop_area:IDFM:71410 → STIF:StopArea:SP:71410: */
+export const stopRefOf = (placeId: string) => `STIF:StopArea:SP:${placeId.split(':').pop()}:`;
+
+export function parseNearby(json: any): NearbyStop[] {
+  return (json?.places_nearby ?? [])
+    .filter((p: any) => p.embedded_type === 'stop_area' && typeof p.id === 'string')
+    .map((p: any) => ({
+      stopRef: stopRefOf(p.id),
+      placeId: p.id,
+      areaNumber: p.id.split(':').pop(),
+      name: p.stop_area?.name ?? p.name ?? '',
+      distance: Math.round(Number(p.distance ?? 0)),
+    }));
+}
+
+export async function nearby(lon: number, lat: number, apiKey: string): Promise<NearbyStop[]> {
+  const json = await get(`/v2/navitia/coord/${lon};${lat}/places_nearby`, { 'type[]': 'stop_area', distance: 700, count: 8 }, apiKey);
+  return parseNearby(json);
 }
