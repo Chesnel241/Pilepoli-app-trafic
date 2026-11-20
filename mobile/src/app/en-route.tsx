@@ -379,7 +379,7 @@ export default function EnRoute() {
         <View style={s.guideArea}>
           {track.sub === 'walk' && step?.kind === 'walk' && step.plan ? (
             // À pied : le GPS piéton prend tout l'écran.
-            <WalkNav plan={step.plan} live={loc} trainAt={departure ?? (boardLeg ? Date.parse(boardLeg.departureAt) : undefined)} onStatus={onWalkStatus} />
+            <WalkNav plan={step.plan} live={loc} trainAt={departure ?? (boardLeg ? Date.parse(boardLeg.departureAt) : undefined)} onStatus={onWalkStatus} nextMode={boardLeg?.mode} />
           ) : track.sub === 'walk' || track.sub === 'wait' ? (
             // Sur le quai (ou marche sans tracé) : « ton train » d'abord.
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
